@@ -5,6 +5,7 @@ import { useSync } from '../useSync'
 
 export default function SyncPanel() {
   const [connected, setConnected] = useState(false)
+  const [connecting, setConnecting] = useState(false)
   const [connectError, setConnectError] = useState('')
   const { syncing, progress, lastSync, error, result, trigger } = useSync()
 
@@ -18,6 +19,7 @@ export default function SyncPanel() {
 
   async function handleConnect() {
     setConnectError('')
+    setConnecting(true)
     try {
       await signIn()
       setConnected(true)
@@ -25,6 +27,8 @@ export default function SyncPanel() {
     } catch (e) {
       console.error('Connect error:', e)
       setConnectError(e.message || 'Connection failed')
+    } finally {
+      setConnecting(false)
     }
   }
 
@@ -85,10 +89,11 @@ export default function SyncPanel() {
           ) : (
             <button
               onClick={handleConnect}
-              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              disabled={connecting}
+              className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
             >
-              <Cloud size={15} />
-              Connect
+              <Cloud size={15} className={connecting ? 'animate-pulse' : ''} />
+              {connecting ? 'Opening…' : 'Connect'}
             </button>
           )}
         </div>
