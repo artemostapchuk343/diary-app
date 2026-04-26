@@ -24,10 +24,13 @@ export function isSignedIn() {
 }
 
 function waitForGSI() {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     if (window.google?.accounts?.oauth2) return resolve()
+    let elapsed = 0
     const interval = setInterval(() => {
       if (window.google?.accounts?.oauth2) { clearInterval(interval); resolve() }
+      elapsed += 100
+      if (elapsed > 10000) { clearInterval(interval); reject(new Error('Google sign-in script failed to load')) }
     }, 100)
   })
 }

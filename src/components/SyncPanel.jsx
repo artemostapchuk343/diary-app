@@ -5,6 +5,7 @@ import { useSync } from '../useSync'
 
 export default function SyncPanel() {
   const [connected, setConnected] = useState(false)
+  const [connectError, setConnectError] = useState('')
   const { syncing, progress, lastSync, error, result, trigger } = useSync()
 
   useEffect(() => {
@@ -16,12 +17,14 @@ export default function SyncPanel() {
   }, [])
 
   async function handleConnect() {
+    setConnectError('')
     try {
       await signIn()
       setConnected(true)
       trigger()
-    } catch {
-      // user closed popup or denied
+    } catch (e) {
+      console.error('Connect error:', e)
+      setConnectError(e.message || 'Connection failed')
     }
   }
 
@@ -91,10 +94,10 @@ export default function SyncPanel() {
         </div>
       </div>
 
-      {error && (
+      {(error || connectError) && (
         <div className="mt-3 flex items-center gap-2 text-red-400 text-sm">
           <AlertCircle size={14} />
-          {error}
+          {connectError || error}
         </div>
       )}
     </div>
