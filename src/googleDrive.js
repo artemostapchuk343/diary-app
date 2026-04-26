@@ -2,12 +2,25 @@ const FOLDER_NAME = 'My Diary'
 const SCOPE = 'https://www.googleapis.com/auth/drive.file'
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 const REDIRECT_URI = window.location.origin
+const CONNECTED_KEY = 'gdrive_was_connected'
 
 let accessToken = null
 let tokenClient = null
 let refreshTimer = null
 
-const CONNECTED_KEY = 'gdrive_was_connected'
+// Parse token immediately on module load — before any React component mounts
+;(function parseRedirectToken() {
+  const hash = window.location.hash.slice(1)
+  if (!hash) return
+  const params = new URLSearchParams(hash)
+  const token = params.get('access_token')
+  const expiresIn = params.get('expires_in')
+  if (!token) return
+  accessToken = token
+  localStorage.setItem(CONNECTED_KEY, '1')
+  window.history.replaceState(null, '', window.location.pathname)
+  setTimeout(() => scheduleRefresh(Number(expiresIn)), 0)
+})()
 
 function scheduleRefresh(expiresIn) {
   clearTimeout(refreshTimer)
@@ -64,6 +77,7 @@ export function handleAuthCallback() {
 }
 
 export async function silentSignIn() {
+  if (accessToken) return true  // already have token from redirect
   if (!localStorage.getItem(CONNECTED_KEY)) return false
   await waitForGSI()
   return new Promise(resolve => {

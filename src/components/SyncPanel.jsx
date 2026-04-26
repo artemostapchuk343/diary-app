@@ -4,7 +4,7 @@ import { isConfigured, isSignedIn, signIn, signOut, silentSignIn } from '../goog
 import { useSync } from '../useSync'
 
 export default function SyncPanel() {
-  const [connected, setConnected] = useState(false)
+  const [connected, setConnected] = useState(isSignedIn)
   const [connectError] = useState('')
   const { syncing, progress, lastSync, error, result, trigger } = useSync()
 
