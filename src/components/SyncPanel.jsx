@@ -17,19 +17,14 @@ export default function SyncPanel() {
     })
   }, [])
 
-  async function handleConnect() {
+  function handleConnect() {
     setConnectError('')
     setConnecting(true)
-    try {
-      await signIn()
-      setConnected(true)
-      trigger()
-    } catch (e) {
-      console.error('Connect error:', e)
-      setConnectError(e.message || 'Connection failed')
-    } finally {
-      setConnecting(false)
-    }
+    // signIn() must be called without await to preserve browser user-gesture context
+    signIn()
+      .then(() => { setConnected(true); trigger() })
+      .catch(e => { console.error('Connect error:', e); setConnectError(e.message || 'Connection failed') })
+      .finally(() => setConnecting(false))
   }
 
   function handleDisconnect() {

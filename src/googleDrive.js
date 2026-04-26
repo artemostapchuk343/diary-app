@@ -35,20 +35,29 @@ function waitForGSI() {
   })
 }
 
-export async function signIn() {
-  await waitForGSI()
+// Pre-initialize token client as soon as GIS loads
+waitForGSI().then(() => {
+  tokenClient = window.google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPE,
+    callback: () => {},
+  })
+}).catch(() => {})
+
+// Must be called synchronously from a click handler — no await before requestAccessToken
+export function signIn() {
   return new Promise((resolve, reject) => {
-    tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPE,
-      callback: response => {
-        if (response.error) return reject(new Error(response.error))
-        accessToken = response.access_token
-        localStorage.setItem(CONNECTED_KEY, '1')
-        scheduleRefresh(response.expires_in)
-        resolve()
-      },
-    })
+    if (!tokenClient) {
+      reject(new Error('Google sign-in not ready. Please refresh and try again.'))
+      return
+    }
+    tokenClient.callback = response => {
+      if (response.error) return reject(new Error(response.error))
+      accessToken = response.access_token
+      localStorage.setItem(CONNECTED_KEY, '1')
+      scheduleRefresh(response.expires_in)
+      resolve()
+    }
     tokenClient.requestAccessToken({ prompt: 'consent' })
   })
 }
@@ -57,16 +66,13 @@ export async function silentSignIn() {
   if (!localStorage.getItem(CONNECTED_KEY)) return false
   await waitForGSI()
   return new Promise(resolve => {
-    tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPE,
-      callback: response => {
-        if (response.error) return resolve(false)
-        accessToken = response.access_token
-        scheduleRefresh(response.expires_in)
-        resolve(true)
-      },
-    })
+    if (!tokenClient) return resolve(false)
+    tokenClient.callback = response => {
+      if (response.error) return resolve(false)
+      accessToken = response.access_token
+      scheduleRefresh(response.expires_in)
+      resolve(true)
+    }
     tokenClient.requestAccessToken({ prompt: '' })
   })
 }
