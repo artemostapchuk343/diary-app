@@ -1,6 +1,7 @@
 const FOLDER_NAME = 'My Diary'
 const SCOPE = 'https://www.googleapis.com/auth/drive.file'
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
+const REDIRECT_URI = window.location.origin
 
 let accessToken = null
 let tokenClient = null
@@ -35,51 +36,54 @@ function waitForGSI() {
   })
 }
 
-// Pre-initialize token client as soon as GIS loads
-waitForGSI().then(() => {
-  tokenClient = window.google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: SCOPE,
-    callback: () => {},
-  })
-}).catch(() => {})
-
-// Must be called synchronously from a click handler — no await before requestAccessToken
 export function signIn() {
-  return new Promise((resolve, reject) => {
-    if (!tokenClient) {
-      reject(new Error('Google sign-in not ready. Please refresh and try again.'))
-      return
-    }
-    tokenClient.callback = response => {
-      if (response.error) return reject(new Error(response.error))
-      accessToken = response.access_token
-      localStorage.setItem(CONNECTED_KEY, '1')
-      scheduleRefresh(response.expires_in)
-      resolve()
-    }
-    tokenClient.requestAccessToken({ prompt: 'consent' })
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    response_type: 'token',
+    scope: SCOPE,
+    prompt: 'consent',
+    include_granted_scopes: 'true',
   })
+  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
+}
+
+// Called on app load — reads token from URL hash after redirect
+export function handleAuthCallback() {
+  const hash = window.location.hash.slice(1)
+  if (!hash) return false
+  const params = new URLSearchParams(hash)
+  const token = params.get('access_token')
+  const expiresIn = params.get('expires_in')
+  if (!token) return false
+  accessToken = token
+  localStorage.setItem(CONNECTED_KEY, '1')
+  scheduleRefresh(Number(expiresIn))
+  window.history.replaceState(null, '', window.location.pathname)
+  return true
 }
 
 export async function silentSignIn() {
   if (!localStorage.getItem(CONNECTED_KEY)) return false
   await waitForGSI()
   return new Promise(resolve => {
-    if (!tokenClient) return resolve(false)
-    tokenClient.callback = response => {
-      if (response.error) return resolve(false)
-      accessToken = response.access_token
-      scheduleRefresh(response.expires_in)
-      resolve(true)
-    }
-    tokenClient.requestAccessToken({ prompt: '' })
+    if (!window.google?.accounts?.oauth2) return resolve(false)
+    const tc = window.google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPE,
+      callback: response => {
+        if (response.error) return resolve(false)
+        accessToken = response.access_token
+        scheduleRefresh(response.expires_in)
+        resolve(true)
+      },
+    })
+    tc.requestAccessToken({ prompt: '' })
   })
 }
 
 export function signOut() {
   clearTimeout(refreshTimer)
-  if (accessToken) window.google?.accounts?.oauth2?.revoke(accessToken)
   accessToken = null
   localStorage.removeItem(CONNECTED_KEY)
 }
