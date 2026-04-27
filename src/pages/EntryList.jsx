@@ -84,11 +84,15 @@ export default function EntryList() {
   const navigate = useNavigate()
   const lock = useAuth(s => s.lock)
   const triggerSync = useSync(s => s.trigger)
+  const lastSync = useSync(s => s.lastSync)
+
+  useEffect(() => {
+    triggerSync()
+  }, [])
 
   useEffect(() => {
     loadEntries()
-    triggerSync()
-  }, [])
+  }, [lastSync])
 
   async function loadEntries() {
     const all = await db.entries.orderBy('createdAt').reverse().toArray()
