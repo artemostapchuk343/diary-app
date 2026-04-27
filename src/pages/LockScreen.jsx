@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Lock, Eye, EyeOff } from 'lucide-react'
+import { Lock, Eye, EyeOff, Cloud } from 'lucide-react'
 import { verifyPassword, savePasswordVerifier, hasPassword, getPasswordConfig } from '../crypto'
 import { useAuth } from '../useAuth'
+import { isConfigured, signIn as driveSignIn } from '../googleDrive'
 
 export default function LockScreen() {
   const [password, setPassword] = useState('')
@@ -42,6 +43,24 @@ export default function LockScreen() {
             {isNew ? 'Set a password to protect your diary' : 'Enter your password to continue'}
           </p>
         </div>
+
+        {isNew && isConfigured() && (
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={driveSignIn}
+              className="w-full flex items-center justify-center gap-2 bg-white/10 hover:bg-white/15 text-white text-base font-medium rounded-xl py-4 transition-colors"
+            >
+              <Cloud size={20} />
+              Connect Google Drive to restore password
+            </button>
+            <div className="flex items-center gap-3 my-5">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="text-slate-500 text-sm">or set a new password</span>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="relative">

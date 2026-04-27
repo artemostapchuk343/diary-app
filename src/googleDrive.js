@@ -9,6 +9,7 @@ const VERIFIER_KEY = 'gdrive_pkce_verifier'
 
 let accessToken = null
 let refreshTimer = null
+let tokenExchangePromise = null
 
 function randomBase64url(len) {
   const arr = crypto.getRandomValues(new Uint8Array(len))
@@ -59,10 +60,10 @@ async function exchangeCode(code) {
   const params = new URLSearchParams(window.location.search)
   const code = params.get('code')
   if (!code) return
-  exchangeCode(code).catch(err => {
+  tokenExchangePromise = exchangeCode(code).catch(err => {
     console.error('Drive token exchange failed:', err)
     window.history.replaceState(null, '', window.location.pathname)
-  })
+  }).finally(() => { tokenExchangePromise = null })
 })()
 
 export function isConfigured() {
@@ -91,6 +92,7 @@ export async function signIn() {
 }
 
 export async function silentSignIn() {
+  if (tokenExchangePromise) await tokenExchangePromise
   if (accessToken) return true
   const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
   if (!refreshToken) return false
