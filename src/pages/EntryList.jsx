@@ -97,7 +97,7 @@ function NormalCard({ entry, hasAttachment, onClick }) {
           <p className="text-slate-400 text-sm line-clamp-2 leading-relaxed">{entry.body}</p>
         </div>
         <span className="text-slate-500 text-sm whitespace-nowrap mt-0.5">
-          {format(new Date(entry.createdAt), 'MMM d, yyyy')}
+          {format(new Date(entry.createdAt), 'd MMM yyyy')}
         </span>
       </div>
       {entry.mood && <span className="mt-3 inline-block text-2xl">{entry.mood}</span>}
@@ -117,7 +117,7 @@ function CompactCard({ entry, hasAttachment, onClick }) {
       }
       <span className="text-white text-sm font-medium truncate flex-1">{entry.title || 'Untitled'}</span>
       {hasAttachment && <Paperclip size={13} className="text-slate-500 shrink-0" />}
-      <span className="text-slate-500 text-xs whitespace-nowrap">{format(new Date(entry.createdAt), 'MMM d')}</span>
+      <span className="text-slate-500 text-xs whitespace-nowrap">{format(new Date(entry.createdAt), 'd MMM yyyy')}</span>
     </button>
   )
 }
@@ -222,7 +222,7 @@ function CalendarView({ entries, attachedEntryIds, navigate, month, onMonthChang
 
       {selectedDay && (
         <div className="mt-5 space-y-2">
-          <p className="text-slate-500 text-sm mb-3">{format(parseISO(selectedDay), 'MMMM d, yyyy')}</p>
+          <p className="text-slate-500 text-sm mb-3">{format(parseISO(selectedDay), 'd MMMM yyyy')}</p>
           {selectedEntries.map(e => (
             <button
               key={e.id}
