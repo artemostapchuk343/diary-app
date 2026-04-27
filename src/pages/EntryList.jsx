@@ -358,33 +358,10 @@ export default function EntryList() {
                 </button>
               ))}
             </div>
-            <button
-              onClick={() => navigate('/entry/new')}
-              title="New entry"
-              className="text-slate-500 hover:text-white transition-colors"
-            >
-              <Plus size={22} />
-            </button>
-            <button
-              onClick={() => importRef.current.click()}
-              disabled={importing}
-              title="Import from file"
-              className="text-slate-500 hover:text-slate-300 disabled:opacity-50 transition-colors"
-            >
-              <FileUp size={20} />
-            </button>
             <button onClick={lock} title="Lock" className="text-slate-500 hover:text-slate-300 transition-colors">
               <Lock size={20} />
             </button>
           </div>
-          <input
-            ref={importRef}
-            type="file"
-            multiple
-            accept=".txt,.md,.markdown,.rtf,.text"
-            className="hidden"
-            onChange={handleFileSelect}
-          />
         </div>
 
         {/* Two-column layout */}
@@ -392,6 +369,33 @@ export default function EntryList() {
           {/* Left — entries */}
           <div className="flex-1 min-w-0">
             <SyncPanel />
+
+            <div className="flex items-center gap-3 mb-5">
+              <button
+                onClick={() => navigate('/entry/new')}
+                className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl py-3 transition-colors"
+              >
+                <Plus size={17} />
+                New Entry
+              </button>
+              <button
+                onClick={() => importRef.current.click()}
+                disabled={importing}
+                title="Import from file"
+                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-medium rounded-xl px-4 py-3 transition-colors disabled:opacity-50"
+              >
+                <FileUp size={16} />
+                Import
+              </button>
+              <input
+                ref={importRef}
+                type="file"
+                multiple
+                accept=".txt,.md,.markdown,.rtf,.text"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+            </div>
 
             <div className="relative mb-5">
               <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
