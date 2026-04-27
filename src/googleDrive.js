@@ -50,6 +50,7 @@ async function exchangeCode(code) {
     localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token)
   }
   localStorage.setItem(CONNECTED_KEY, '1')
+  sessionStorage.removeItem('gdrive_auth_attempted')
   scheduleRefresh(data.expires_in)
   window.history.replaceState(null, '', window.location.pathname)
   window.dispatchEvent(new Event('gdrive-connected'))
@@ -58,6 +59,10 @@ async function exchangeCode(code) {
 // Parse auth code from URL on module load
 ;(function parseRedirectCode() {
   const params = new URLSearchParams(window.location.search)
+  if (params.get('error')) {
+    window.history.replaceState(null, '', window.location.pathname)
+    return
+  }
   const code = params.get('code')
   if (!code) return
   tokenExchangePromise = exchangeCode(code).catch(err => {
@@ -237,6 +242,56 @@ async function downloadFile(fileId) {
 }
 
 const PASSWORD_FILE_NAME = '.diary-password'
+const DELETED_FILE_NAME = '.diary-deleted'
+
+async function getDeletedIds(folderId) {
+  try {
+    const resp = await api(
+      `/files?q=name='${DELETED_FILE_NAME}' and '${folderId}' in parents and trashed=false&fields=files(id)`
+    )
+    const { files } = await resp.json()
+    if (!files?.length) return { ids: [], fileId: null }
+    const content = await downloadFile(files[0].id)
+    return { ids: JSON.parse(content), fileId: files[0].id }
+  } catch {
+    return { ids: [], fileId: null }
+  }
+}
+
+async function saveDeletedIds(folderId, ids, existingFileId = null) {
+  const metadata = {
+    name: DELETED_FILE_NAME,
+    mimeType: 'application/json',
+    ...(!existingFileId && { parents: [folderId] }),
+  }
+  const form = new FormData()
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+  form.append('file', new Blob([JSON.stringify(ids)], { type: 'application/json' }))
+  const url = existingFileId
+    ? `/files/${existingFileId}?uploadType=multipart`
+    : '/files?uploadType=multipart'
+  await uploadApi(url, { method: existingFileId ? 'PATCH' : 'POST', body: form })
+}
+
+export async function markEntryDeleted(entryId) {
+  if (!accessToken) return
+  try {
+    const folderId = await getOrCreateFolder()
+    const resp = await api(
+      `/files?q=appProperties has { key='entryId' and value='${String(entryId)}' } and '${folderId}' in parents and trashed=false&fields=files(id)`
+    )
+    const { files } = await resp.json()
+    if (files?.length) {
+      await api(`/files/${files[0].id}`, { method: 'DELETE' })
+    }
+    const { ids, fileId } = await getDeletedIds(folderId)
+    if (!ids.includes(String(entryId))) {
+      await saveDeletedIds(folderId, [...ids, String(entryId)], fileId)
+    }
+  } catch (e) {
+    console.error('Failed to mark entry deleted in Drive:', e)
+  }
+}
 
 export async function downloadPasswordConfig() {
   try {
@@ -278,9 +333,11 @@ export async function uploadPasswordConfig(config) {
   }
 }
 
-export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry }) {
+export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry, onDeleteEntry }) {
   const folderId = await getOrCreateFolder()
   const driveFiles = await listDriveEntries(folderId)
+  const { ids: deletedIds, fileId: deletedFileId } = await getDeletedIds(folderId)
+  const deletedSet = new Set(deletedIds)
 
   const driveByEntryId = {}
   driveFiles.forEach(f => {
@@ -290,9 +347,19 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
   const localById = {}
   localEntries.forEach(e => { localById[String(e.id)] = e })
 
+  // Apply remote deletions to local DB
+  for (const id of deletedSet) {
+    if (localById[id]) {
+      await onDeleteEntry?.(id)
+      delete localById[id]
+    }
+  }
+
+  // Upload local → Drive (skip deleted entries)
+  const entriesToUpload = localEntries.filter(e => !deletedSet.has(String(e.id)))
   let uploaded = 0, downloaded = 0
 
-  for (const entry of localEntries) {
+  for (const entry of entriesToUpload) {
     const driveFile = driveByEntryId[String(entry.id)]
     const content = entryToMarkdown(entry)
     if (driveFile) {
@@ -306,12 +373,13 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
       await uploadFile(folderId, content, entry)
       uploaded++
     }
-    onProgress?.(`Uploading… ${uploaded}/${localEntries.length}`)
+    onProgress?.(`Uploading… ${uploaded}/${entriesToUpload.length}`)
   }
 
+  // Download Drive → local (skip deleted)
   const driveOnlyFiles = driveFiles.filter(f => {
     const eid = f.appProperties?.entryId
-    return eid && !localById[eid]
+    return eid && !localById[eid] && !deletedSet.has(eid)
   })
 
   for (const f of driveOnlyFiles) {

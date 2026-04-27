@@ -5,6 +5,7 @@ import { db } from '../db'
 import { format } from 'date-fns'
 import MoodPicker from '../components/MoodPicker'
 import { useSync } from '../useSync'
+import { isSignedIn, markEntryDeleted } from '../googleDrive'
 
 export default function EntryEditor() {
   const { id } = useParams()
@@ -56,6 +57,7 @@ export default function EntryEditor() {
     if (!window.confirm('Delete this entry?')) return
     await db.attachments.where('entryId').equals(Number(id)).delete()
     await db.entries.delete(Number(id))
+    if (isSignedIn()) markEntryDeleted(id).catch(() => {})
     navigate('/')
   }
 

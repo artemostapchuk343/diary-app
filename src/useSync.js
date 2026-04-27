@@ -41,6 +41,10 @@ export const useSync = create((set, get) => ({
             updatedAt: parsed.updatedAt,
           })
         },
+        onDeleteEntry: async id => {
+          await db.attachments.where('entryId').equals(Number(id)).delete()
+          await db.entries.delete(Number(id))
+        },
       })
 
       const now = Date.now()

@@ -26,13 +26,17 @@ export const useAuth = create((set) => ({
       return
     }
     try {
-      const { silentSignIn, downloadPasswordConfig } = await import('./googleDrive')
+      const { silentSignIn, downloadPasswordConfig, isConfigured, signIn } = await import('./googleDrive')
       const ok = await silentSignIn()
       if (ok) {
         const config = await downloadPasswordConfig()
         if (config?.salt && config?.verify) {
           loadPasswordConfig(config)
         }
+      } else if (isConfigured() && !sessionStorage.getItem('gdrive_auth_attempted')) {
+        sessionStorage.setItem('gdrive_auth_attempted', '1')
+        signIn()
+        return
       }
     } catch (e) {
       console.error('Auth init failed:', e)
