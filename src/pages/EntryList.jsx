@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Lock, FileUp, Calendar, LayoutList, AlignJustify, Paperclip, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Search, Lock, FileUp, Calendar, LayoutList, AlignJustify, Paperclip, ChevronLeft, ChevronRight, NotebookPen } from 'lucide-react'
 import { db } from '../db'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
@@ -400,7 +400,7 @@ export default function EntryList() {
           <>
             {filtered.length === 0 && (
               <div className="flex flex-col items-center justify-center py-24 text-slate-500">
-                <BookOpen size={48} className="mb-4 opacity-30" />
+                <NotebookPen size={48} className="mb-4 opacity-30" />
                 <p className="text-base">{query ? 'No entries found.' : 'No entries yet. Start writing!'}</p>
               </div>
             )}
