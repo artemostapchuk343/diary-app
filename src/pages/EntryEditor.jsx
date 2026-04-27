@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Trash2, Paperclip, X, Image } from 'lucide-react'
+import { ArrowLeft, Trash2, Paperclip, X, Image, UploadCloud } from 'lucide-react'
 import { db } from '../db'
 import { format } from 'date-fns'
 import MoodPicker from '../components/MoodPicker'
 import { useSync } from '../useSync'
-import { isSignedIn, markEntryDeleted } from '../googleDrive'
+import { isSignedIn, markEntryDeleted, uploadSingleEntry } from '../googleDrive'
 
 export default function EntryEditor() {
   const { id } = useParams()
@@ -18,6 +18,9 @@ export default function EntryEditor() {
   const [mood, setMood] = useState('')
   const [attachments, setAttachments] = useState([])
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  // Stable cross-device metadata for this entry
+  const [entryMeta, setEntryMeta] = useState(null)
   const triggerSync = useSync(s => s.trigger)
 
   useEffect(() => {
@@ -30,6 +33,7 @@ export default function EntryEditor() {
     setTitle(entry.title || '')
     setBody(entry.body || '')
     setMood(entry.mood || '')
+    setEntryMeta({ id: entry.id, sourceId: entry.sourceId || null, createdAt: entry.createdAt })
     const files = await db.attachments.where('entryId').equals(Number(id)).toArray()
     setAttachments(files)
   }
@@ -42,6 +46,7 @@ export default function EntryEditor() {
       for (const att of attachments) {
         if (!att.id) await db.attachments.add({ ...att, entryId: newId })
       }
+      setEntryMeta({ id: newId, sourceId: null, createdAt: now })
       navigate(`/entry/${newId}`, { replace: true })
     } else {
       await db.entries.update(Number(id), { title, body, mood, updatedAt: now })
@@ -50,14 +55,30 @@ export default function EntryEditor() {
       }
     }
     setSaving(false)
-    triggerSync()
+    triggerSync(true)
+  }
+
+  async function handleUpload() {
+    if (!isSignedIn() || !entryMeta) return
+    setUploading(true)
+    try {
+      const now = new Date().toISOString()
+      if (!isNew) {
+        await db.entries.update(Number(id), { title, body, mood, updatedAt: now })
+      }
+      await uploadSingleEntry({ ...entryMeta, title, body, mood, updatedAt: now })
+    } catch (e) {
+      console.error('Upload failed:', e)
+    } finally {
+      setUploading(false)
+    }
   }
 
   async function deleteEntry() {
     if (!window.confirm('Delete this entry?')) return
     await db.attachments.where('entryId').equals(Number(id)).delete()
     await db.entries.delete(Number(id))
-    if (isSignedIn()) markEntryDeleted(id).catch(() => {})
+    if (isSignedIn() && entryMeta) markEntryDeleted(entryMeta).catch(() => {})
     navigate('/')
   }
 
@@ -88,7 +109,7 @@ export default function EntryEditor() {
   return (
     <div className="min-h-screen bg-[#0f0f13] flex flex-col max-w-2xl mx-auto px-6 py-8">
       <div className="flex items-center justify-between mb-8">
-        <button onClick={() => { navigate('/'); triggerSync() }} className="text-slate-400 hover:text-white transition-colors">
+        <button onClick={() => { navigate('/'); triggerSync(true) }} className="text-slate-400 hover:text-white transition-colors">
           <ArrowLeft size={26} />
         </button>
         <div className="flex items-center gap-4">
@@ -98,6 +119,16 @@ export default function EntryEditor() {
           {!isNew && (
             <button onClick={deleteEntry} className="text-slate-500 hover:text-red-400 transition-colors">
               <Trash2 size={22} />
+            </button>
+          )}
+          {isSignedIn() && (
+            <button
+              onClick={handleUpload}
+              disabled={uploading || isNew}
+              title="Upload to Drive"
+              className="text-slate-500 hover:text-indigo-400 disabled:opacity-30 transition-colors"
+            >
+              <UploadCloud size={22} className={uploading ? 'animate-pulse' : ''} />
             </button>
           )}
           <button

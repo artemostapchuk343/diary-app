@@ -56,7 +56,6 @@ async function exchangeCode(code) {
   window.dispatchEvent(new Event('gdrive-connected'))
 }
 
-// Parse auth code from URL on module load
 ;(function parseRedirectCode() {
   const params = new URLSearchParams(window.location.search)
   if (params.get('error')) {
@@ -176,11 +175,16 @@ async function getOrCreateFolder() {
   return (await create.json()).id
 }
 
+// Returns the stable cross-device id for an entry
+function canonicalId(entry) {
+  return String(entry.sourceId || entry.id)
+}
+
 export function entryToMarkdown(entry) {
   const title = (entry.title || '').replace(/"/g, '\\"')
   return [
     '---',
-    `id: "${entry.id}"`,
+    `id: "${canonicalId(entry)}"`,
     `title: "${title}"`,
     `mood: "${entry.mood || ''}"`,
     `createdAt: "${entry.createdAt}"`,
@@ -214,26 +218,27 @@ async function listDriveEntries(folderId) {
   return files || []
 }
 
-async function uploadFile(folderId, content, entry, existingId = null) {
+async function uploadFile(folderId, content, entry, existingDriveFileId = null) {
+  const cid = canonicalId(entry)
   const filename = `${(entry.createdAt || '').slice(0, 10)}_${(entry.title || 'untitled')
     .replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 40)}.md`
 
   const metadata = {
     name: filename,
     mimeType: 'text/plain',
-    appProperties: { entryId: String(entry.id) },
-    ...(!existingId && { parents: [folderId] }),
+    appProperties: { entryId: cid },
+    ...(!existingDriveFileId && { parents: [folderId] }),
   }
 
   const form = new FormData()
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
   form.append('file', new Blob([content], { type: 'text/plain' }))
 
-  const url = existingId
-    ? `/files/${existingId}?uploadType=multipart`
+  const url = existingDriveFileId
+    ? `/files/${existingDriveFileId}?uploadType=multipart`
     : '/files?uploadType=multipart'
 
-  await uploadApi(url, { method: existingId ? 'PATCH' : 'POST', body: form })
+  await uploadApi(url, { method: existingDriveFileId ? 'PATCH' : 'POST', body: form })
 }
 
 async function downloadFile(fileId) {
@@ -273,24 +278,36 @@ async function saveDeletedIds(folderId, ids, existingFileId = null) {
   await uploadApi(url, { method: existingFileId ? 'PATCH' : 'POST', body: form })
 }
 
-export async function markEntryDeleted(entryId) {
+// entry: full entry object (needs .id and optionally .sourceId)
+export async function markEntryDeleted(entry) {
   if (!accessToken) return
+  const cid = canonicalId(entry)
   try {
     const folderId = await getOrCreateFolder()
     const resp = await api(
-      `/files?q=appProperties has { key='entryId' and value='${String(entryId)}' } and '${folderId}' in parents and trashed=false&fields=files(id)`
+      `/files?q=appProperties has { key='entryId' and value='${cid}' } and '${folderId}' in parents and trashed=false&fields=files(id)`
     )
     const { files } = await resp.json()
     if (files?.length) {
       await api(`/files/${files[0].id}`, { method: 'DELETE' })
     }
     const { ids, fileId } = await getDeletedIds(folderId)
-    if (!ids.includes(String(entryId))) {
-      await saveDeletedIds(folderId, [...ids, String(entryId)], fileId)
+    if (!ids.includes(cid)) {
+      await saveDeletedIds(folderId, [...ids, cid], fileId)
     }
   } catch (e) {
     console.error('Failed to mark entry deleted in Drive:', e)
   }
+}
+
+export async function uploadSingleEntry(entry) {
+  if (!accessToken) return
+  const folderId = await getOrCreateFolder()
+  const cid = canonicalId(entry)
+  const driveFiles = await listDriveEntries(folderId)
+  const existing = driveFiles.find(f => f.appProperties?.entryId === cid)
+  const content = entryToMarkdown(entry)
+  await uploadFile(folderId, content, entry, existing?.id || null)
 }
 
 export async function downloadPasswordConfig() {
@@ -333,7 +350,7 @@ export async function uploadPasswordConfig(config) {
   }
 }
 
-export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry, onDeleteEntry }) {
+export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry }) {
   const folderId = await getOrCreateFolder()
   const driveFiles = await listDriveEntries(folderId)
   const { ids: deletedIds, fileId: deletedFileId } = await getDeletedIds(folderId)
@@ -344,27 +361,28 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
     if (f.appProperties?.entryId) driveByEntryId[f.appProperties.entryId] = f
   })
 
-  const localById = {}
-  const localBySourceId = {}
+  // Build local lookups by both DB id and canonical (source) id
+  const localByCanonicalId = {}
   localEntries.forEach(e => {
-    localById[String(e.id)] = e
-    if (e.sourceId) localBySourceId[e.sourceId] = e
+    localByCanonicalId[canonicalId(e)] = e
   })
 
-  // Apply remote deletions to local DB
+  // Apply remote deletions to local DB (match by canonical id)
   for (const id of deletedSet) {
-    if (localById[id]) {
-      await onDeleteEntry?.(id)
-      delete localById[id]
+    const localEntry = localByCanonicalId[id]
+    if (localEntry) {
+      await onDeleteEntry?.(String(localEntry.id))
+      delete localByCanonicalId[id]
     }
   }
 
-  // Upload local → Drive (skip deleted entries)
-  const entriesToUpload = localEntries.filter(e => !deletedSet.has(String(e.id)))
+  // Upload local → Drive, skip entries marked deleted on another device
+  const entriesToUpload = localEntries.filter(e => !deletedSet.has(canonicalId(e)))
   let uploaded = 0, downloaded = 0
 
   for (const entry of entriesToUpload) {
-    const driveFile = driveByEntryId[String(entry.id)]
+    const cid = canonicalId(entry)
+    const driveFile = driveByEntryId[cid]
     const content = entryToMarkdown(entry)
     if (driveFile) {
       const driveTime = new Date(driveFile.modifiedTime).getTime()
@@ -380,10 +398,10 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
     onProgress?.(`Uploading… ${uploaded}/${entriesToUpload.length}`)
   }
 
-  // Download Drive → local (skip deleted and already-downloaded entries)
+  // Download Drive → local: only entries not already present and not deleted
   const driveOnlyFiles = driveFiles.filter(f => {
     const eid = f.appProperties?.entryId
-    return eid && !localById[eid] && !localBySourceId[eid] && !deletedSet.has(eid)
+    return eid && !localByCanonicalId[eid] && !deletedSet.has(eid)
   })
 
   for (const f of driveOnlyFiles) {
