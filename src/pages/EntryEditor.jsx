@@ -190,7 +190,7 @@ export default function EntryEditor() {
         </button>
         <div className="flex items-center gap-4">
           <span className="text-slate-500 text-sm">
-            {format(new Date(), 'MMM d, yyyy')}
+            {format(entryMeta ? new Date(entryMeta.createdAt) : new Date(), 'MMM d, yyyy')}
           </span>
           {!isNew && (
             <button onClick={deleteEntry} disabled={busy} className="text-slate-500 hover:text-red-400 disabled:opacity-30 transition-colors">
