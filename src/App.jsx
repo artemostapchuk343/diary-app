@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './useAuth'
 import LockScreen from './pages/LockScreen'
@@ -6,6 +7,19 @@ import EntryEditor from './pages/EntryEditor'
 
 function Guard({ children }) {
   const unlocked = useAuth(s => s.unlocked)
+  const initializing = useAuth(s => s.initializing)
+  const init = useAuth(s => s.init)
+
+  useEffect(() => { init() }, [])
+
+  if (initializing) {
+    return (
+      <div className="min-h-screen bg-[#0f0f13] flex items-center justify-center">
+        <p className="text-slate-500 text-base">Loading…</p>
+      </div>
+    )
+  }
+
   return unlocked ? children : <LockScreen />
 }
 

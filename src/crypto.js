@@ -64,3 +64,15 @@ export async function savePasswordVerifier(password) {
 export function hasPassword() {
   return !!localStorage.getItem('diary_verify')
 }
+
+export function getPasswordConfig() {
+  return {
+    salt: localStorage.getItem(SALT_KEY),
+    verify: localStorage.getItem('diary_verify'),
+  }
+}
+
+export function loadPasswordConfig({ salt, verify }) {
+  if (salt) localStorage.setItem(SALT_KEY, salt)
+  if (verify) localStorage.setItem('diary_verify', verify)
+}

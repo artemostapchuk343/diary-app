@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Lock, Eye, EyeOff } from 'lucide-react'
-import { verifyPassword, savePasswordVerifier, hasPassword } from '../crypto'
+import { verifyPassword, savePasswordVerifier, hasPassword, getPasswordConfig } from '../crypto'
 import { useAuth } from '../useAuth'
 
 export default function LockScreen() {
@@ -19,6 +19,9 @@ export default function LockScreen() {
       if (password.length < 4) return setError('Password must be at least 4 characters.')
       if (password !== confirm) return setError('Passwords do not match.')
       await savePasswordVerifier(password)
+      import('../googleDrive').then(({ isSignedIn, uploadPasswordConfig }) => {
+        if (isSignedIn()) uploadPasswordConfig(getPasswordConfig())
+      }).catch(() => {})
       unlock()
     } else {
       const ok = await verifyPassword(password)

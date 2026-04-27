@@ -234,6 +234,48 @@ async function downloadFile(fileId) {
   return resp.text()
 }
 
+const PASSWORD_FILE_NAME = '.diary-password'
+
+export async function downloadPasswordConfig() {
+  try {
+    const folderId = await getOrCreateFolder()
+    const resp = await api(
+      `/files?q=name='${PASSWORD_FILE_NAME}' and '${folderId}' in parents and trashed=false&fields=files(id)`
+    )
+    const { files } = await resp.json()
+    if (!files?.length) return null
+    const content = await downloadFile(files[0].id)
+    return JSON.parse(content)
+  } catch {
+    return null
+  }
+}
+
+export async function uploadPasswordConfig(config) {
+  try {
+    const folderId = await getOrCreateFolder()
+    const resp = await api(
+      `/files?q=name='${PASSWORD_FILE_NAME}' and '${folderId}' in parents and trashed=false&fields=files(id)`
+    )
+    const { files } = await resp.json()
+    const existingId = files?.[0]?.id || null
+    const metadata = {
+      name: PASSWORD_FILE_NAME,
+      mimeType: 'application/json',
+      ...(!existingId && { parents: [folderId] }),
+    }
+    const form = new FormData()
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+    form.append('file', new Blob([JSON.stringify(config)], { type: 'application/json' }))
+    const url = existingId
+      ? `/files/${existingId}?uploadType=multipart`
+      : '/files?uploadType=multipart'
+    await uploadApi(url, { method: existingId ? 'PATCH' : 'POST', body: form })
+  } catch (e) {
+    console.error('Failed to upload password config:', e)
+  }
+}
+
 export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry }) {
   const folderId = await getOrCreateFolder()
   const driveFiles = await listDriveEntries(folderId)
