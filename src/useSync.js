@@ -11,11 +11,11 @@ export const useSync = create((set, get) => ({
   error: '',
   result: null,
 
-  trigger: async () => {
+  trigger: async (force = false) => {
     const { syncing, lastSync } = get()
     if (syncing) return
     if (!isSignedIn()) return
-    if (lastSync && Date.now() - lastSync < MIN_INTERVAL_MS) return
+    if (!force && lastSync && Date.now() - lastSync < MIN_INTERVAL_MS) return
 
     set({ syncing: true, error: '', result: null, progress: 'Syncing…' })
 
