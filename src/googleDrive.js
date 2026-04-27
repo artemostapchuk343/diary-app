@@ -1,4 +1,7 @@
 const FOLDER_NAME = 'My Diary'
+const CONFIG_FOLDER_NAME = '_config'
+const PASSWORD_FILE_NAME = '.diary-password'
+const DELETED_FILE_NAME = '.diary-deleted'
 const SCOPE = 'https://www.googleapis.com/auth/drive.file'
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 const CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET
@@ -10,6 +13,21 @@ const VERIFIER_KEY = 'gdrive_pkce_verifier'
 let accessToken = null
 let refreshTimer = null
 let tokenExchangePromise = null
+
+// In-session folder ID cache — avoids redundant Drive API calls
+let rootFolderId = null
+let configFolderId = null
+const monthFolderCache = {}  // 'MM.YYYY' → id
+const dayFolderCache = {}    // 'MM.YYYY/DD' → id
+
+function clearFolderCache() {
+  rootFolderId = null
+  configFolderId = null
+  Object.keys(monthFolderCache).forEach(k => delete monthFolderCache[k])
+  Object.keys(dayFolderCache).forEach(k => delete dayFolderCache[k])
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
 
 function randomBase64url(len) {
   const arr = crypto.getRandomValues(new Uint8Array(len))
@@ -46,9 +64,7 @@ async function exchangeCode(code) {
   const data = await resp.json()
   if (data.error) throw new Error(data.error_description || data.error)
   accessToken = data.access_token
-  if (data.refresh_token) {
-    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token)
-  }
+  if (data.refresh_token) localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token)
   localStorage.setItem(CONNECTED_KEY, '1')
   sessionStorage.removeItem('gdrive_auth_attempted')
   scheduleRefresh(data.expires_in)
@@ -70,13 +86,8 @@ async function exchangeCode(code) {
   }).finally(() => { tokenExchangePromise = null })
 })()
 
-export function isConfigured() {
-  return !!CLIENT_ID && !!CLIENT_SECRET
-}
-
-export function isSignedIn() {
-  return !!accessToken
-}
+export function isConfigured() { return !!CLIENT_ID && !!CLIENT_SECRET }
+export function isSignedIn() { return !!accessToken }
 
 export async function signIn() {
   const verifier = randomBase64url(64)
@@ -130,17 +141,17 @@ export function signOut() {
   accessToken = null
   localStorage.removeItem(CONNECTED_KEY)
   localStorage.removeItem(REFRESH_TOKEN_KEY)
+  clearFolderCache()
 }
+
+// ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
 async function api(path, options = {}) {
   const resp = await fetch(`https://www.googleapis.com/drive/v3${path}`, {
     ...options,
     headers: { Authorization: `Bearer ${accessToken}`, ...options.headers },
   })
-  if (resp.status === 401) {
-    accessToken = null
-    throw new Error('TOKEN_EXPIRED')
-  }
+  if (resp.status === 401) { accessToken = null; throw new Error('TOKEN_EXPIRED') }
   return resp
 }
 
@@ -149,10 +160,7 @@ async function uploadApi(path, options = {}) {
     ...options,
     headers: { Authorization: `Bearer ${accessToken}`, ...options.headers },
   })
-  if (resp.status === 401) {
-    accessToken = null
-    throw new Error('TOKEN_EXPIRED')
-  }
+  if (resp.status === 401) { accessToken = null; throw new Error('TOKEN_EXPIRED') }
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}))
     throw new Error(err?.error?.message || `Upload failed: ${resp.status}`)
@@ -160,22 +168,65 @@ async function uploadApi(path, options = {}) {
   return resp
 }
 
-async function getOrCreateFolder() {
+// ─── Folder management ────────────────────────────────────────────────────────
+//
+// Drive structure:
+//   My Diary/
+//     _config/          ← .diary-password, .diary-deleted
+//     04.2026/
+//       27/             ← entry .md files + attachment files
+
+async function getOrCreateSubfolder(name, parentId) {
   const resp = await api(
-    `/files?q=name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)`
+    `/files?q=name='${name}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)&pageSize=1`
   )
   const { files } = await resp.json()
   if (files?.length) return files[0].id
+  const create = await api('/files', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }),
+  })
+  return (await create.json()).id
+}
 
+async function getRootFolder() {
+  if (rootFolderId) return rootFolderId
+  const resp = await api(
+    `/files?q=name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)&pageSize=1`
+  )
+  const { files } = await resp.json()
+  if (files?.length) { rootFolderId = files[0].id; return rootFolderId }
   const create = await api('/files', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }),
   })
-  return (await create.json()).id
+  rootFolderId = (await create.json()).id
+  return rootFolderId
 }
 
-// Returns the stable cross-device id for an entry
+async function getConfigFolder() {
+  if (configFolderId) return configFolderId
+  configFolderId = await getOrCreateSubfolder(CONFIG_FOLDER_NAME, await getRootFolder())
+  return configFolderId
+}
+
+// isoDate: '2026-04-27' → creates My Diary/04.2026/27/
+async function getDayFolder(isoDate) {
+  const [year, month, day] = isoDate.split('-')
+  const monthKey = `${month}.${year}`
+  const dayKey = `${monthKey}/${day}`
+  if (dayFolderCache[dayKey]) return dayFolderCache[dayKey]
+  if (!monthFolderCache[monthKey]) {
+    monthFolderCache[monthKey] = await getOrCreateSubfolder(monthKey, await getRootFolder())
+  }
+  dayFolderCache[dayKey] = await getOrCreateSubfolder(day, monthFolderCache[monthKey])
+  return dayFolderCache[dayKey]
+}
+
+// ─── Entry serialisation ──────────────────────────────────────────────────────
+
 function canonicalId(entry) {
   return String(entry.sourceId || entry.id)
 }
@@ -215,37 +266,32 @@ export function markdownToEntry(content) {
   return entry
 }
 
-async function listDriveEntries(folderId) {
+// ─── File listing ─────────────────────────────────────────────────────────────
+//
+// Using broad queries without parent filter. With drive.file scope the API only
+// returns files created by this app, so broad queries are safe.
+// Including `parents` in fields so sync can detect and migrate old flat files.
+
+async function listDriveEntries() {
   const resp = await api(
-    `/files?q='${folderId}' in parents and trashed=false and mimeType='text/plain'` +
-    `&fields=files(id,name,modifiedTime,appProperties)&pageSize=1000`
+    `/files?q=mimeType='text/plain' and trashed=false` +
+    `&fields=files(id,name,modifiedTime,appProperties,parents)&pageSize=1000`
+  )
+  const { files } = await resp.json()
+  // Filter to files that carry entryId (excludes any stray text files)
+  return (files || []).filter(f => f.appProperties?.entryId)
+}
+
+async function listDriveAttachments() {
+  const resp = await api(
+    `/files?q=appProperties has { key='isAttachment' and value='true' } and trashed=false` +
+    `&fields=files(id,name,mimeType,appProperties,parents)&pageSize=1000`
   )
   const { files } = await resp.json()
   return files || []
 }
 
-async function uploadFile(folderId, content, entry, existingDriveFileId = null) {
-  const cid = canonicalId(entry)
-  const filename = `${(entry.createdAt || '').slice(0, 10)}_${(entry.title || 'untitled')
-    .replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 40)}.md`
-
-  const metadata = {
-    name: filename,
-    mimeType: 'text/plain',
-    appProperties: { entryId: cid },
-    ...(!existingDriveFileId && { parents: [folderId] }),
-  }
-
-  const form = new FormData()
-  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
-  form.append('file', new Blob([content], { type: 'text/plain' }))
-
-  const url = existingDriveFileId
-    ? `/files/${existingDriveFileId}?uploadType=multipart`
-    : '/files?uploadType=multipart'
-
-  await uploadApi(url, { method: existingDriveFileId ? 'PATCH' : 'POST', body: form })
-}
+// ─── File upload / download ───────────────────────────────────────────────────
 
 async function downloadFile(fileId) {
   const resp = await api(`/files/${fileId}?alt=media`)
@@ -270,53 +316,120 @@ async function downloadAttachmentAsDataUrl(fileId) {
   })
 }
 
-async function listDriveAttachments(folderId) {
-  const resp = await api(
-    `/files?q='${folderId}' in parents and trashed=false and appProperties has { key='isAttachment' and value='true' }&fields=files(id,name,mimeType,appProperties)&pageSize=1000`
-  )
-  const { files } = await resp.json()
-  return files || []
+// Uploads or updates an entry .md file.
+// oldParentId: when provided and differs from the target day folder, the file
+// is moved to the correct location in the same request.
+async function uploadFile(content, entry, existingDriveFileId = null, oldParentId = null) {
+  const date = (entry.createdAt || new Date().toISOString()).slice(0, 10)
+  const dayFolderId = await getDayFolder(date)
+  const filename = `${date}_${(entry.title || 'untitled')
+    .replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 40)}.md`
+
+  const metadata = {
+    name: filename,
+    mimeType: 'text/plain',
+    appProperties: { entryId: canonicalId(entry) },
+  }
+
+  let urlPath
+  if (existingDriveFileId) {
+    let qs = '?uploadType=multipart'
+    if (oldParentId && oldParentId !== dayFolderId) {
+      qs += `&addParents=${dayFolderId}&removeParents=${oldParentId}`
+    }
+    urlPath = `/files/${existingDriveFileId}${qs}`
+  } else {
+    metadata.parents = [dayFolderId]
+    urlPath = '/files?uploadType=multipart'
+  }
+
+  const form = new FormData()
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+  form.append('file', new Blob([content], { type: 'text/plain' }))
+  await uploadApi(urlPath, { method: existingDriveFileId ? 'PATCH' : 'POST', body: form })
 }
 
-async function uploadAttachment(folderId, attachment, entryCanonicalId, existingFileId = null) {
+// Uploads or updates an attachment file.
+async function uploadAttachment(attachment, entryCanonicalId, entryCreatedAt, existingFileId = null, oldParentId = null) {
+  const date = (entryCreatedAt || new Date().toISOString()).slice(0, 10)
+  const dayFolderId = await getDayFolder(date)
   const blob = base64ToBlob(attachment.data)
+
   const metadata = {
     name: attachment.name,
     mimeType: attachment.type || 'application/octet-stream',
     appProperties: { entryId: entryCanonicalId, isAttachment: 'true', attachmentName: attachment.name },
-    ...(!existingFileId && { parents: [folderId] }),
   }
+
+  let urlPath
+  if (existingFileId) {
+    let qs = '?uploadType=multipart'
+    if (oldParentId && oldParentId !== dayFolderId) {
+      qs += `&addParents=${dayFolderId}&removeParents=${oldParentId}`
+    }
+    urlPath = `/files/${existingFileId}${qs}`
+  } else {
+    metadata.parents = [dayFolderId]
+    urlPath = '/files?uploadType=multipart'
+  }
+
   const form = new FormData()
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
   form.append('file', blob)
-  const url = existingFileId
-    ? `/files/${existingFileId}?uploadType=multipart`
-    : '/files?uploadType=multipart'
-  await uploadApi(url, { method: existingFileId ? 'PATCH' : 'POST', body: form })
+  await uploadApi(urlPath, { method: existingFileId ? 'PATCH' : 'POST', body: form })
 }
 
-const PASSWORD_FILE_NAME = '.diary-password'
-const DELETED_FILE_NAME = '.diary-deleted'
+// ─── Config files (tombstone + password) ─────────────────────────────────────
+//
+// Stored in _config/. Migrates automatically from old flat location on first use.
 
-async function getDeletedIds(folderId) {
+async function findOrMigrateConfigFile(name) {
+  const configId = await getConfigFolder()
+
+  // Check new location first
+  let resp = await api(
+    `/files?q=name='${name}' and '${configId}' in parents and trashed=false&fields=files(id)&pageSize=1`
+  )
+  let { files } = await resp.json()
+  if (files?.length) return files[0].id
+
+  // Check old flat location and migrate if found
+  const rootId = await getRootFolder()
+  resp = await api(
+    `/files?q=name='${name}' and '${rootId}' in parents and trashed=false&fields=files(id)&pageSize=1`
+  )
+  ;({ files } = await resp.json())
+  if (files?.length) {
+    try {
+      await api(`/files/${files[0].id}?addParents=${configId}&removeParents=${rootId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+    } catch {}
+    return files[0].id
+  }
+
+  return null
+}
+
+async function getDeletedIds() {
   try {
-    const resp = await api(
-      `/files?q=name='${DELETED_FILE_NAME}' and '${folderId}' in parents and trashed=false&fields=files(id)`
-    )
-    const { files } = await resp.json()
-    if (!files?.length) return { ids: [], fileId: null }
-    const content = await downloadFile(files[0].id)
-    return { ids: JSON.parse(content), fileId: files[0].id }
+    const fileId = await findOrMigrateConfigFile(DELETED_FILE_NAME)
+    if (!fileId) return { ids: [], fileId: null }
+    const content = await downloadFile(fileId)
+    return { ids: JSON.parse(content), fileId }
   } catch {
     return { ids: [], fileId: null }
   }
 }
 
-async function saveDeletedIds(folderId, ids, existingFileId = null) {
+async function saveDeletedIds(ids, existingFileId = null) {
+  const configId = await getConfigFolder()
   const metadata = {
     name: DELETED_FILE_NAME,
     mimeType: 'application/json',
-    ...(!existingFileId && { parents: [folderId] }),
+    ...(!existingFileId && { parents: [configId] }),
   }
   const form = new FormData()
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
@@ -327,23 +440,26 @@ async function saveDeletedIds(folderId, ids, existingFileId = null) {
   await uploadApi(url, { method: existingFileId ? 'PATCH' : 'POST', body: form })
 }
 
-// entry: full entry object (needs .id and optionally .sourceId)
+// ─── Public API ───────────────────────────────────────────────────────────────
+
 export async function markEntryDeleted(entry) {
   if (!accessToken) return
   const cid = canonicalId(entry)
   try {
-    const folderId = await getOrCreateFolder()
-    const resp = await api(
-      `/files?q=appProperties has { key='entryId' and value='${cid}' } and '${folderId}' in parents and trashed=false&fields=files(id)`
-    )
-    const { files } = await resp.json()
-    if (files?.length) {
-      await api(`/files/${files[0].id}`, { method: 'DELETE' })
+    const [driveFiles, driveAtts] = await Promise.all([
+      listDriveEntries(),
+      listDriveAttachments(),
+    ])
+    const entryFile = driveFiles.find(f => f.appProperties?.entryId === cid)
+    if (entryFile) await api(`/files/${entryFile.id}`, { method: 'DELETE' })
+
+    // Delete all attachments for this entry
+    for (const att of driveAtts.filter(f => f.appProperties?.entryId === cid)) {
+      await api(`/files/${att.id}`, { method: 'DELETE' })
     }
-    const { ids, fileId } = await getDeletedIds(folderId)
-    if (!ids.includes(cid)) {
-      await saveDeletedIds(folderId, [...ids, cid], fileId)
-    }
+
+    const { ids, fileId } = await getDeletedIds()
+    if (!ids.includes(cid)) await saveDeletedIds([...ids, cid], fileId)
   } catch (e) {
     console.error('Failed to mark entry deleted in Drive:', e)
   }
@@ -352,31 +468,25 @@ export async function markEntryDeleted(entry) {
 export async function uploadSingleEntry(entry) {
   if (!accessToken) return { status: 'not_connected' }
   try {
-    const folderId = await getOrCreateFolder()
     const cid = canonicalId(entry)
-
-    // Check tombstone first
-    const { ids: deletedIds } = await getDeletedIds(folderId)
+    const { ids: deletedIds } = await getDeletedIds()
     if (deletedIds.includes(cid)) return { status: 'previously_deleted' }
 
     const [driveFiles, driveAtts] = await Promise.all([
-      listDriveEntries(folderId),
-      listDriveAttachments(folderId),
+      listDriveEntries(),
+      listDriveAttachments(),
     ])
     const existing = driveFiles.find(f => f.appProperties?.entryId === cid)
-    const content = entryToMarkdown(entry)
-    await uploadFile(folderId, content, entry, existing?.id || null)
+    await uploadFile(entryToMarkdown(entry), entry, existing?.id || null, existing?.parents?.[0] || null)
 
     const driveAttsForEntry = driveAtts.filter(f => f.appProperties?.entryId === cid)
     const localAttNames = new Set((entry.attachments || []).map(a => a.name))
 
-    // Upload local attachments not yet on Drive
     for (const att of (entry.attachments || [])) {
       const onDrive = driveAttsForEntry.find(f => f.appProperties?.attachmentName === att.name)
-      if (!onDrive) await uploadAttachment(folderId, att, cid)
+      if (!onDrive) await uploadAttachment(att, cid, entry.createdAt)
     }
 
-    // Delete Drive attachments that were removed locally
     for (const driveAtt of driveAttsForEntry) {
       const name = driveAtt.appProperties?.attachmentName
       if (name && !localAttNames.has(name)) {
@@ -393,30 +503,19 @@ export async function uploadSingleEntry(entry) {
 
 export async function restoreAndUpload(entry) {
   if (!accessToken) return
-  const folderId = await getOrCreateFolder()
   const cid = canonicalId(entry)
-
-  // Remove from tombstone so other devices don't delete it
-  const { ids, fileId } = await getDeletedIds(folderId)
-  if (ids.includes(cid)) {
-    await saveDeletedIds(folderId, ids.filter(id => id !== cid), fileId)
-  }
-
-  const driveFiles = await listDriveEntries(folderId)
+  const { ids, fileId } = await getDeletedIds()
+  if (ids.includes(cid)) await saveDeletedIds(ids.filter(id => id !== cid), fileId)
+  const driveFiles = await listDriveEntries()
   const existing = driveFiles.find(f => f.appProperties?.entryId === cid)
-  const content = entryToMarkdown(entry)
-  await uploadFile(folderId, content, entry, existing?.id || null)
+  await uploadFile(entryToMarkdown(entry), entry, existing?.id || null, existing?.parents?.[0] || null)
 }
 
 export async function downloadPasswordConfig() {
   try {
-    const folderId = await getOrCreateFolder()
-    const resp = await api(
-      `/files?q=name='${PASSWORD_FILE_NAME}' and '${folderId}' in parents and trashed=false&fields=files(id)`
-    )
-    const { files } = await resp.json()
-    if (!files?.length) return null
-    const content = await downloadFile(files[0].id)
+    const fileId = await findOrMigrateConfigFile(PASSWORD_FILE_NAME)
+    if (!fileId) return null
+    const content = await downloadFile(fileId)
     return JSON.parse(content)
   } catch {
     return null
@@ -425,16 +524,12 @@ export async function downloadPasswordConfig() {
 
 export async function uploadPasswordConfig(config) {
   try {
-    const folderId = await getOrCreateFolder()
-    const resp = await api(
-      `/files?q=name='${PASSWORD_FILE_NAME}' and '${folderId}' in parents and trashed=false&fields=files(id)`
-    )
-    const { files } = await resp.json()
-    const existingId = files?.[0]?.id || null
+    const configId = await getConfigFolder()
+    const existingId = await findOrMigrateConfigFile(PASSWORD_FILE_NAME)
     const metadata = {
       name: PASSWORD_FILE_NAME,
       mimeType: 'application/json',
-      ...(!existingId && { parents: [folderId] }),
+      ...(!existingId && { parents: [configId] }),
     }
     const form = new FormData()
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
@@ -449,20 +544,19 @@ export async function uploadPasswordConfig(config) {
 }
 
 export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry, onSaveAttachment }) {
-  const folderId = await getOrCreateFolder()
   const [driveFiles, driveAttachFiles, { ids: deletedIds }] = await Promise.all([
-    listDriveEntries(folderId),
-    listDriveAttachments(folderId),
-    getDeletedIds(folderId),
+    listDriveEntries(),
+    listDriveAttachments(),
+    getDeletedIds(),
   ])
   const deletedSet = new Set(deletedIds)
+  const rootId = await getRootFolder()
 
   const driveByEntryId = {}
   driveFiles.forEach(f => {
     if (f.appProperties?.entryId) driveByEntryId[f.appProperties.entryId] = f
   })
 
-  // { canonicalEntryId: { attachmentName: driveFile } }
   const driveAttsByEntryId = {}
   driveAttachFiles.forEach(f => {
     const eid = f.appProperties?.entryId
@@ -492,16 +586,29 @@ export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry
     const cid = canonicalId(entry)
     const driveFile = driveByEntryId[cid]
     const content = entryToMarkdown(entry)
+    const date = (entry.createdAt || '').slice(0, 10)
 
     if (driveFile) {
       const driveTime = new Date(driveFile.modifiedTime).getTime()
       const localTime = new Date(entry.updatedAt).getTime()
+      const oldParentId = driveFile.parents?.[0] || null
+      const isFlat = oldParentId === rootId
+
       if (localTime > driveTime) {
-        await uploadFile(folderId, content, entry, driveFile.id)
+        // Update content; also migrates to day folder if currently in old flat location
+        await uploadFile(content, entry, driveFile.id, oldParentId)
         uploaded++
+      } else if (isFlat) {
+        // Content is up-to-date but file is in old flat location — move it
+        const dayFolderId = await getDayFolder(date)
+        await api(`/files/${driveFile.id}?addParents=${dayFolderId}&removeParents=${rootId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
       }
     } else {
-      await uploadFile(folderId, content, entry)
+      await uploadFile(content, entry)
       uploaded++
     }
 
@@ -512,11 +619,11 @@ export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry
     // Upload local attachments not yet on Drive
     for (const att of (entry.attachments || [])) {
       if (!driveAttNames.has(att.name)) {
-        await uploadAttachment(folderId, att, cid)
+        await uploadAttachment(att, cid, entry.createdAt)
       }
     }
 
-    // Download Drive attachments not yet local
+    // Download Drive attachments not yet local; migrate flat ones
     for (const [attName, driveAtt] of Object.entries(driveAttsForEntry)) {
       if (!localAttNames.has(attName)) {
         try {
@@ -531,12 +638,24 @@ export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry
           console.error('Failed to download attachment:', attName, e)
         }
       }
+
+      // Migrate attachment from old flat location
+      if (driveAtt.parents?.[0] === rootId) {
+        try {
+          const dayFolderId = await getDayFolder(date)
+          await api(`/files/${driveAtt.id}?addParents=${dayFolderId}&removeParents=${rootId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          })
+        } catch {}
+      }
     }
 
-    onProgress?.(`Uploading… ${uploaded}/${entriesToUpload.length}`)
+    onProgress?.(`Syncing… ${uploaded}/${entriesToUpload.length}`)
   }
 
-  // Download new entries + their attachments
+  // Download Drive-only entries + their attachments
   const driveOnlyFiles = driveFiles.filter(f => {
     const eid = f.appProperties?.entryId
     return eid && !localByCanonicalId[eid] && !deletedSet.has(eid)
@@ -548,9 +667,7 @@ export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry
     if (parsed) {
       const newLocalId = await onNewEntry(parsed)
       downloaded++
-
-      const driveAtts = Object.values(driveAttsByEntryId[parsed.id] || {})
-      for (const driveAtt of driveAtts) {
+      for (const driveAtt of Object.values(driveAttsByEntryId[parsed.id] || {})) {
         try {
           const dataUrl = await downloadAttachmentAsDataUrl(driveAtt.id)
           await onSaveAttachment?.(newLocalId, {
