@@ -355,21 +355,26 @@ export async function uploadSingleEntry(entry) {
 
     const [driveFiles, driveAtts] = await Promise.all([
       listDriveEntries(folderId),
-      entry.attachments?.length ? listDriveAttachments(folderId) : Promise.resolve([]),
+      listDriveAttachments(folderId),
     ])
     const existing = driveFiles.find(f => f.appProperties?.entryId === cid)
     const content = entryToMarkdown(entry)
     await uploadFile(folderId, content, entry, existing?.id || null)
 
-    if (entry.attachments?.length) {
-      const existingAttNames = new Set(
-        driveAtts.filter(f => f.appProperties?.entryId === cid)
-                 .map(f => f.appProperties?.attachmentName)
-      )
-      for (const att of entry.attachments) {
-        if (!existingAttNames.has(att.name)) {
-          await uploadAttachment(folderId, att, cid)
-        }
+    const driveAttsForEntry = driveAtts.filter(f => f.appProperties?.entryId === cid)
+    const localAttNames = new Set((entry.attachments || []).map(a => a.name))
+
+    // Upload local attachments not yet on Drive
+    for (const att of (entry.attachments || [])) {
+      const onDrive = driveAttsForEntry.find(f => f.appProperties?.attachmentName === att.name)
+      if (!onDrive) await uploadAttachment(folderId, att, cid)
+    }
+
+    // Delete Drive attachments that were removed locally
+    for (const driveAtt of driveAttsForEntry) {
+      const name = driveAtt.appProperties?.attachmentName
+      if (name && !localAttNames.has(name)) {
+        await api(`/files/${driveAtt.id}`, { method: 'DELETE' })
       }
     }
 
