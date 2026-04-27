@@ -182,17 +182,19 @@ function canonicalId(entry) {
 
 export function entryToMarkdown(entry) {
   const title = (entry.title || '').replace(/"/g, '\\"')
-  return [
+  const lines = [
     '---',
     `id: "${canonicalId(entry)}"`,
     `title: "${title}"`,
     `mood: "${entry.mood || ''}"`,
     `createdAt: "${entry.createdAt}"`,
     `updatedAt: "${entry.updatedAt}"`,
-    '---',
-    '',
-    entry.body || '',
-  ].join('\n')
+  ]
+  if (entry.translations && Object.keys(entry.translations).length > 0) {
+    lines.push(`translations: ${JSON.stringify(entry.translations)}`)
+  }
+  lines.push('---', '', entry.body || '')
+  return lines.join('\n')
 }
 
 export function markdownToEntry(content) {
@@ -206,6 +208,10 @@ export function markdownToEntry(content) {
     const val = line.slice(colon + 2).trim().replace(/^"(.*)"$/, '$1')
     entry[key] = val
   })
+  if (entry.translations) {
+    try { entry.translations = JSON.parse(entry.translations) }
+    catch { entry.translations = {} }
+  }
   return entry
 }
 

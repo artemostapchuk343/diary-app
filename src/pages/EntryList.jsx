@@ -308,10 +308,14 @@ export default function EntryList() {
   }
 
   const filtered = query.trim()
-    ? entries.filter(e =>
-        e.title?.toLowerCase().includes(query.toLowerCase()) ||
-        e.body?.toLowerCase().includes(query.toLowerCase())
-      )
+    ? entries.filter(e => {
+        const q = query.toLowerCase()
+        if (e.title?.toLowerCase().includes(q)) return true
+        if (e.body?.toLowerCase().includes(q)) return true
+        return Object.values(e.translations || {}).some(t =>
+          t.title?.toLowerCase().includes(q) || t.body?.toLowerCase().includes(q)
+        )
+      })
     : entries
 
   return (

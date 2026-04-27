@@ -15,29 +15,22 @@ const STATUS_LABEL = {
 }
 
 const LANGS = [
-  { code: 'en', label: 'EN' },
-  { code: 'uk', label: 'UA' },
-  { code: 'pl', label: 'PL' },
+  { code: 'en', label: 'EN', name: 'English' },
+  { code: 'uk', label: 'UA', name: 'Ukrainian' },
+  { code: 'pl', label: 'PL', name: 'Polish' },
 ]
 
 async function translateText(text, targetLang) {
   if (!text.trim()) return text
-
-  // Split into chunks on paragraph boundaries, max 4000 chars each
   const lines = text.split('\n')
   const chunks = []
   let chunk = ''
   for (const line of lines) {
     const next = chunk ? chunk + '\n' + line : line
-    if (next.length > 4000 && chunk) {
-      chunks.push(chunk)
-      chunk = line
-    } else {
-      chunk = next
-    }
+    if (next.length > 4000 && chunk) { chunks.push(chunk); chunk = line }
+    else chunk = next
   }
   if (chunk) chunks.push(chunk)
-
   const results = []
   for (const c of chunks) {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(c)}`
@@ -49,13 +42,73 @@ async function translateText(text, targetLang) {
   return results.join('\n')
 }
 
+function DeleteModal({ activeLang, savedLangs, onDeleteAll, onDeleteTranslation, onPromotePrimary, onCancel }) {
+  const [choosingPrimary, setChoosingPrimary] = useState(false)
+  const langName = { en: 'English', uk: 'Ukrainian', pl: 'Polish' }
+
+  if (choosingPrimary) {
+    return (
+      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
+        <div className="bg-[#1a1a22] border border-white/10 rounded-2xl p-6 w-full max-w-sm">
+          <h2 className="text-white text-lg font-semibold mb-2">Choose new primary</h2>
+          <p className="text-slate-400 text-sm mb-5">Which translation becomes the main version?</p>
+          <div className="flex flex-col gap-2">
+            {savedLangs.map(lang => (
+              <button key={lang} onClick={() => onPromotePrimary(lang)}
+                className="w-full bg-white/5 hover:bg-indigo-600/30 hover:text-indigo-300 text-white font-medium rounded-xl py-3 transition-colors">
+                {langName[lang] || lang}
+              </button>
+            ))}
+            <button onClick={onCancel} className="w-full text-slate-500 hover:text-slate-300 text-sm py-2 transition-colors">Cancel</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
+      <div className="bg-[#1a1a22] border border-white/10 rounded-2xl p-6 w-full max-w-sm">
+        <h2 className="text-white text-lg font-semibold mb-2">Delete note?</h2>
+        {savedLangs.length > 0 && (
+          <p className="text-slate-400 text-sm mb-1">
+            Saved translations: {savedLangs.map(l => langName[l] || l).join(', ')}
+          </p>
+        )}
+        <div className="flex flex-col gap-2 mt-4">
+          <button onClick={onDeleteAll}
+            className="w-full bg-red-600/20 hover:bg-red-500/30 border border-red-500/20 text-red-400 font-medium rounded-xl py-3 transition-colors">
+            Delete entire note
+          </button>
+          {activeLang && savedLangs.includes(activeLang) && (
+            <button onClick={() => onDeleteTranslation(activeLang)}
+              className="w-full bg-white/5 hover:bg-white/10 text-slate-300 font-medium rounded-xl py-3 transition-colors">
+              Delete only {langName[activeLang] || activeLang} translation
+            </button>
+          )}
+          {!activeLang && savedLangs.length > 0 && (
+            <button onClick={() => setChoosingPrimary(true)}
+              className="w-full bg-white/5 hover:bg-white/10 text-slate-300 font-medium rounded-xl py-3 transition-colors">
+              Remove primary, promote a translation
+            </button>
+          )}
+          <button onClick={onCancel}
+            className="w-full text-slate-500 hover:text-slate-300 text-sm py-2 transition-colors">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DeletedPromptModal({ onRestore, onKeepLocal, onCancel }) {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
       <div className="bg-[#1a1a22] border border-white/10 rounded-2xl p-6 w-full max-w-sm">
         <h2 className="text-white text-lg font-semibold mb-2">Note was previously deleted</h2>
         <p className="text-slate-400 text-sm mb-6">
-          This note was deleted from Drive on another device. Do you want to upload it again as a new note, or keep it only on this device?
+          This note was deleted from Drive on another device. Upload it again, or keep it only on this device?
         </p>
         <div className="flex flex-col gap-2">
           <button onClick={onRestore} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-base font-medium rounded-xl py-3 transition-colors">
@@ -80,16 +133,18 @@ export default function EntryEditor() {
   const photoRef = useRef()
   const fileRef = useRef()
 
+  const [entryData, setEntryData] = useState(null)
+  const [activeLang, setActiveLang] = useState(null) // null = viewing primary
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [mood, setMood] = useState('')
   const [attachments, setAttachments] = useState([])
   const [saveStatus, setSaveStatus] = useState('idle')
   const [dirty, setDirty] = useState(isNew)
-  const [entryMeta, setEntryMeta] = useState(null)
   const [deletedPromptEntry, setDeletedPromptEntry] = useState(null)
   const [translating, setTranslating] = useState(false)
   const [translateError, setTranslateError] = useState('')
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   useEffect(() => {
     if (!isNew) loadEntry()
@@ -98,43 +153,105 @@ export default function EntryEditor() {
   async function loadEntry() {
     const entry = await db.entries.get(Number(id))
     if (!entry) return navigate('/')
+    setEntryData(entry)
     setTitle(entry.title || '')
     setBody(entry.body || '')
     setMood(entry.mood || '')
-    setEntryMeta({ id: entry.id, sourceId: entry.sourceId || null, createdAt: entry.createdAt })
+    setActiveLang(null)
+    setDirty(false)
     const files = await db.attachments.where('entryId').equals(Number(id)).toArray()
     setAttachments(files)
+  }
+
+  async function handleLangClick(lang) {
+    if (translating) return
+
+    // Clicking the active lang returns to primary
+    if (activeLang === lang) {
+      setActiveLang(null)
+      setTitle(entryData.title || '')
+      setBody(entryData.body || '')
+      setDirty(false)
+      return
+    }
+
+    const saved = entryData?.translations?.[lang]
+    if (saved) {
+      setActiveLang(lang)
+      setTitle(saved.title || '')
+      setBody(saved.body || '')
+      setDirty(false)
+      return
+    }
+
+    // No saved translation — auto-translate from primary
+    setActiveLang(lang)
+    setTitle('')
+    setBody('')
+    setTranslating(true)
+    setTranslateError('')
+    try {
+      const [newTitle, newBody] = await Promise.all([
+        entryData?.title ? translateText(entryData.title, lang) : Promise.resolve(''),
+        entryData?.body ? translateText(entryData.body, lang) : Promise.resolve(''),
+      ])
+      setTitle(newTitle)
+      setBody(newBody)
+      setDirty(true)
+    } catch (e) {
+      console.error('Translation failed:', e)
+      setTranslateError('Translation failed. Try again.')
+      setTimeout(() => setTranslateError(''), 3000)
+      setActiveLang(null)
+      setTitle(entryData?.title || '')
+      setBody(entryData?.body || '')
+    } finally {
+      setTranslating(false)
+    }
   }
 
   async function save() {
     if (saveStatus !== 'idle' && saveStatus !== 'error') return
     setSaveStatus('saving')
     const now = new Date().toISOString()
-    let savedMeta = entryMeta
+    let currentEntryData = entryData
 
     try {
       if (isNew) {
         const sourceId = crypto.randomUUID()
-        const newId = await db.entries.add({ sourceId, title, body, mood, createdAt: now, updatedAt: now })
+        const newId = await db.entries.add({
+          sourceId, title, body, mood,
+          translations: {},
+          createdAt: now, updatedAt: now,
+        })
         for (const att of attachments) {
           if (!att.id) await db.attachments.add({ ...att, entryId: newId })
         }
-        savedMeta = { id: newId, sourceId, createdAt: now }
-        setEntryMeta(savedMeta)
+        currentEntryData = { id: newId, sourceId, title, body, mood, translations: {}, createdAt: now, updatedAt: now }
+        setEntryData(currentEntryData)
         navigate(`/entry/${newId}`, { replace: true })
+      } else if (activeLang) {
+        // Save translation
+        const newTranslations = { ...(entryData.translations || {}), [activeLang]: { title, body } }
+        await db.entries.update(Number(id), { translations: newTranslations, updatedAt: now })
+        currentEntryData = { ...entryData, translations: newTranslations, updatedAt: now }
+        setEntryData(currentEntryData)
       } else {
+        // Save primary
         await db.entries.update(Number(id), { title, body, mood, updatedAt: now })
         for (const att of attachments) {
           if (!att.id) await db.attachments.add({ ...att, entryId: Number(id) })
         }
+        currentEntryData = { ...entryData, title, body, mood, updatedAt: now }
+        setEntryData(currentEntryData)
       }
 
-      if (isSignedIn() && savedMeta) {
+      if (isSignedIn() && currentEntryData?.id) {
         setSaveStatus('uploading')
-        const entry = { ...savedMeta, title, body, mood, updatedAt: now, attachments }
-        const result = await uploadSingleEntry(entry)
+        const entryForUpload = { ...currentEntryData, attachments }
+        const result = await uploadSingleEntry(entryForUpload)
         if (result.status === 'previously_deleted') {
-          setDeletedPromptEntry(entry)
+          setDeletedPromptEntry(entryForUpload)
           setSaveStatus('idle')
           return
         }
@@ -166,32 +283,59 @@ export default function EntryEditor() {
     }
   }
 
-  async function deleteEntry() {
-    if (!window.confirm('Delete this entry?')) return
+  async function deleteEntireEntry() {
+    setShowDeleteModal(false)
     await db.attachments.where('entryId').equals(Number(id)).delete()
     await db.entries.delete(Number(id))
-    if (isSignedIn() && entryMeta) markEntryDeleted(entryMeta).catch(() => {})
+    if (isSignedIn() && entryData) markEntryDeleted(entryData).catch(() => {})
     navigate('/')
   }
 
-  async function handleTranslate(langCode) {
-    if (translating || (!title && !body)) return
-    setTranslating(true)
-    setTranslateError('')
-    try {
-      const [newTitle, newBody] = await Promise.all([
-        title ? translateText(title, langCode) : Promise.resolve(title),
-        body ? translateText(body, langCode) : Promise.resolve(body),
-      ])
-      setTitle(newTitle)
-      setBody(newBody)
-      setDirty(true)
-    } catch (e) {
-      console.error('Translation failed:', e)
-      setTranslateError('Translation failed. Try again.')
-      setTimeout(() => setTranslateError(''), 3000)
-    } finally {
-      setTranslating(false)
+  async function deleteTranslation(lang) {
+    setShowDeleteModal(false)
+    const newTranslations = { ...(entryData.translations || {}) }
+    delete newTranslations[lang]
+    const now = new Date().toISOString()
+    await db.entries.update(Number(id), { translations: newTranslations, updatedAt: now })
+    const updated = { ...entryData, translations: newTranslations, updatedAt: now }
+    setEntryData(updated)
+    if (activeLang === lang) {
+      setActiveLang(null)
+      setTitle(entryData.title || '')
+      setBody(entryData.body || '')
+      setDirty(false)
+    }
+    if (isSignedIn()) uploadSingleEntry({ ...updated, attachments }).catch(() => {})
+  }
+
+  async function promoteToPrimary(lang) {
+    setShowDeleteModal(false)
+    const translation = entryData.translations?.[lang]
+    if (!translation) return
+    const newTranslations = { ...(entryData.translations || {}) }
+    delete newTranslations[lang]
+    const now = new Date().toISOString()
+    await db.entries.update(Number(id), {
+      title: translation.title,
+      body: translation.body,
+      translations: newTranslations,
+      updatedAt: now,
+    })
+    const updated = { ...entryData, title: translation.title, body: translation.body, translations: newTranslations, updatedAt: now }
+    setEntryData(updated)
+    setActiveLang(null)
+    setTitle(translation.title || '')
+    setBody(translation.body || '')
+    setDirty(false)
+    if (isSignedIn()) uploadSingleEntry({ ...updated, attachments }).catch(() => {})
+  }
+
+  function handleDeleteClick() {
+    const savedLangs = Object.keys(entryData?.translations || {})
+    if (savedLangs.length > 0) {
+      setShowDeleteModal(true)
+    } else {
+      if (window.confirm('Delete this entry?')) deleteEntireEntry()
     }
   }
 
@@ -205,24 +349,24 @@ export default function EntryEditor() {
     Array.from(files).forEach(file => {
       const reader = new FileReader()
       reader.onload = e => {
-        setAttachments(prev => [...prev, {
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          data: e.target.result,
-        }])
+        setAttachments(prev => [...prev, { name: file.name, type: file.type, size: file.size, data: e.target.result }])
         setDirty(true)
       }
       reader.readAsDataURL(file)
     })
   }
 
-  function isImage(att) {
-    return att.type?.startsWith('image/')
-  }
-
+  const savedLangs = Object.keys(entryData?.translations || {})
   const busy = saveStatus === 'saving' || saveStatus === 'uploading'
   const saveDisabled = busy || translating || (!dirty && saveStatus !== 'done')
+
+  function langButtonClass(code) {
+    const isActive = activeLang === code
+    const isSaved = !!entryData?.translations?.[code]
+    if (isActive) return 'bg-indigo-600 text-white'
+    if (isSaved) return 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/40'
+    return 'bg-white/5 text-slate-500 hover:text-slate-300 hover:bg-white/10'
+  }
 
   return (
     <div className="min-h-screen bg-[#0f0f13] flex flex-col max-w-2xl mx-auto px-6 py-8">
@@ -233,6 +377,16 @@ export default function EntryEditor() {
           onCancel={() => setDeletedPromptEntry(null)}
         />
       )}
+      {showDeleteModal && (
+        <DeleteModal
+          activeLang={activeLang}
+          savedLangs={savedLangs}
+          onDeleteAll={deleteEntireEntry}
+          onDeleteTranslation={deleteTranslation}
+          onPromotePrimary={promoteToPrimary}
+          onCancel={() => setShowDeleteModal(false)}
+        />
+      )}
 
       <div className="flex items-center justify-between mb-8">
         <button onClick={() => navigate('/')} className="text-slate-400 hover:text-white transition-colors">
@@ -240,10 +394,10 @@ export default function EntryEditor() {
         </button>
         <div className="flex items-center gap-4">
           <span className="text-slate-500 text-sm">
-            {format(entryMeta ? new Date(entryMeta.createdAt) : new Date(), 'MMM d, yyyy')}
+            {format(entryData ? new Date(entryData.createdAt) : new Date(), 'MMM d, yyyy')}
           </span>
           {!isNew && (
-            <button onClick={deleteEntry} disabled={busy} className="text-slate-500 hover:text-red-400 disabled:opacity-30 transition-colors">
+            <button onClick={handleDeleteClick} disabled={busy} className="text-slate-500 hover:text-red-400 disabled:opacity-30 transition-colors">
               <Trash2 size={22} />
             </button>
           )}
@@ -266,26 +420,36 @@ export default function EntryEditor() {
         className="bg-transparent text-white text-3xl font-semibold placeholder-slate-600 outline-none border-none mb-4 w-full"
       />
 
-      <div className="mb-5 flex items-center gap-3 flex-wrap">
-        <MoodPicker value={mood} onChange={v => { setMood(v); setDirty(true) }} />
-        <div className="flex items-center gap-1.5 ml-auto">
-          <Languages size={15} className="text-slate-500" />
-          {LANGS.map(({ code, label }) => (
-            <button
-              key={code}
-              onClick={() => handleTranslate(code)}
-              disabled={translating}
-              title={`Translate to ${label}`}
-              className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-indigo-600/30 hover:text-indigo-300 text-slate-400 transition-colors disabled:opacity-40"
-            >
-              {translating ? '…' : label}
-            </button>
-          ))}
-        </div>
-        {translateError && (
-          <p className="w-full text-red-400 text-xs mt-1">{translateError}</p>
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
+        {!activeLang
+          ? <MoodPicker value={mood} onChange={v => { setMood(v); setDirty(true) }} />
+          : mood && <span className="text-2xl">{mood}</span>
+        }
+        {!isNew && (
+          <div className="flex items-center gap-1.5 ml-auto">
+            <Languages size={15} className="text-slate-500 shrink-0" />
+            {LANGS.map(({ code, label }) => (
+              <button
+                key={code}
+                onClick={() => handleLangClick(code)}
+                disabled={translating}
+                className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${langButtonClass(code)}`}
+              >
+                {translating && activeLang === code ? '…' : label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
+
+      {activeLang && (
+        <p className="text-xs text-slate-500 mb-3">
+          {LANGS.find(l => l.code === activeLang)?.name} translation
+          {entryData?.translations?.[activeLang] ? ' · saved' : ' · not saved yet — click Save to keep it'}
+        </p>
+      )}
+
+      {translateError && <p className="text-red-400 text-xs mb-3">{translateError}</p>}
 
       <textarea
         placeholder="Write your thoughts…"
@@ -295,11 +459,11 @@ export default function EntryEditor() {
         autoFocus={isNew}
       />
 
-      {attachments.length > 0 && (
+      {!activeLang && attachments.length > 0 && (
         <div className="mt-5 grid grid-cols-2 gap-3">
           {attachments.map((att, i) => (
             <div key={i} className="relative bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-              {isImage(att) ? (
+              {att.type?.startsWith('image/') ? (
                 <img src={att.data} alt={att.name} className="w-full h-40 object-cover" />
               ) : (
                 <div className="flex items-center gap-3 p-4">
@@ -318,37 +482,20 @@ export default function EntryEditor() {
         </div>
       )}
 
-      <div className="mt-5 pt-5 border-t border-white/10 flex items-center gap-5">
-        <input
-          ref={photoRef}
-          type="file"
-          multiple
-          accept="image/*,video/*"
-          className="hidden"
-          onChange={e => handleFiles(e.target.files)}
-        />
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={e => handleFiles(e.target.files)}
-        />
-        <button
-          onClick={() => photoRef.current.click()}
-          className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-base transition-colors"
-        >
-          <Image size={20} />
-          <span>Photo</span>
-        </button>
-        <button
-          onClick={() => fileRef.current.click()}
-          className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-base transition-colors"
-        >
-          <Paperclip size={20} />
-          <span>File</span>
-        </button>
-      </div>
+      {!activeLang && (
+        <div className="mt-5 pt-5 border-t border-white/10 flex items-center gap-5">
+          <input ref={photoRef} type="file" multiple accept="image/*,video/*" className="hidden" onChange={e => handleFiles(e.target.files)} />
+          <input ref={fileRef} type="file" multiple className="hidden" onChange={e => handleFiles(e.target.files)} />
+          <button onClick={() => photoRef.current.click()} className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-base transition-colors">
+            <Image size={20} />
+            <span>Photo</span>
+          </button>
+          <button onClick={() => fileRef.current.click()} className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-base transition-colors">
+            <Paperclip size={20} />
+            <span>File</span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }
