@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { isSignedIn, sync } from './googleDrive'
+import { isSignedIn, sync, downloadProfilePic } from './googleDrive'
 import { db } from './db'
 
 const MIN_INTERVAL_MS = 30_000
@@ -67,6 +67,16 @@ export const useSync = create((set, get) => ({
           await db.entries.delete(Number(id))
         },
       })
+
+      // Sync profile picture from Drive
+      downloadProfilePic().then(async dataUrl => {
+        if (!dataUrl) return
+        const local = await db.settings.get('profile_pic')
+        if (local?.value !== dataUrl) {
+          await db.settings.put({ key: 'profile_pic', value: dataUrl })
+          window.dispatchEvent(new Event('profile-pic-updated'))
+        }
+      }).catch(() => {})
 
       const now = Date.now()
       localStorage.setItem('last_sync', new Date(now).toLocaleTimeString())

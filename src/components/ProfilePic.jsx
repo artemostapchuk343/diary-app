@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Camera, User } from 'lucide-react'
 import { db } from '../db'
+import { isSignedIn, uploadProfilePic } from '../googleDrive'
 
 async function resizeToJpeg(file, maxPx = 256) {
   return new Promise(resolve => {
@@ -34,6 +35,9 @@ export default function ProfilePic({ size = 'md', editable = false }) {
 
   useEffect(() => {
     db.settings.get('profile_pic').then(s => { if (s?.value) setPic(s.value) })
+    const refresh = () => db.settings.get('profile_pic').then(s => { if (s?.value) setPic(s.value) })
+    window.addEventListener('profile-pic-updated', refresh)
+    return () => window.removeEventListener('profile-pic-updated', refresh)
   }, [])
 
   async function handleFile(e) {
@@ -43,6 +47,7 @@ export default function ProfilePic({ size = 'md', editable = false }) {
     await db.settings.put({ key: 'profile_pic', value: dataUrl })
     setPic(dataUrl)
     e.target.value = ''
+    if (isSignedIn()) uploadProfilePic(dataUrl).catch(() => {})
   }
 
   return (

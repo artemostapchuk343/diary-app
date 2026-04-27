@@ -2,6 +2,7 @@ const FOLDER_NAME = 'My Diary'
 const CONFIG_FOLDER_NAME = '_config'
 const PASSWORD_FILE_NAME = '.diary-password'
 const DELETED_FILE_NAME = '.diary-deleted'
+const PROFILE_PIC_FILE_NAME = 'profile_pic.jpg'
 const SCOPE = 'https://www.googleapis.com/auth/drive.file'
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 const CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET
@@ -540,6 +541,40 @@ export async function uploadPasswordConfig(config) {
     await uploadApi(url, { method: existingId ? 'PATCH' : 'POST', body: form })
   } catch (e) {
     console.error('Failed to upload password config:', e)
+  }
+}
+
+export async function uploadProfilePic(dataUrl) {
+  if (!accessToken) return
+  try {
+    const configId = await getConfigFolder()
+    const existingId = await findOrMigrateConfigFile(PROFILE_PIC_FILE_NAME)
+    const blob = base64ToBlob(dataUrl)
+    const metadata = {
+      name: PROFILE_PIC_FILE_NAME,
+      mimeType: 'image/jpeg',
+      ...(!existingId && { parents: [configId] }),
+    }
+    const form = new FormData()
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+    form.append('file', blob)
+    const url = existingId
+      ? `/files/${existingId}?uploadType=multipart`
+      : '/files?uploadType=multipart'
+    await uploadApi(url, { method: existingId ? 'PATCH' : 'POST', body: form })
+  } catch (e) {
+    console.error('Failed to upload profile pic:', e)
+  }
+}
+
+export async function downloadProfilePic() {
+  if (!accessToken) return null
+  try {
+    const fileId = await findOrMigrateConfigFile(PROFILE_PIC_FILE_NAME)
+    if (!fileId) return null
+    return await downloadAttachmentAsDataUrl(fileId)
+  } catch {
+    return null
   }
 }
 
