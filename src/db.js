@@ -7,3 +7,9 @@ db.version(1).stores({
   attachments: '++id, entryId',
   settings: 'key',
 })
+
+db.version(2).stores({
+  entries: '++id, date, createdAt, updatedAt, sourceId',
+  attachments: '++id, entryId',
+  settings: 'key',
+})
