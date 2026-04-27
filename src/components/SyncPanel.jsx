@@ -49,11 +49,14 @@ export default function SyncPanel() {
             <p className="text-white text-sm font-medium">
               {connected ? 'Google Drive connected' : 'Google Drive'}
             </p>
-            {connected && !syncing && lastSyncLabel && (
+            {connected && !syncing && lastSyncLabel && !result && (
               <p className="text-slate-500 text-xs">Last sync: {lastSyncLabel}</p>
             )}
             {syncing && <p className="text-slate-400 text-xs">{progress || 'Syncing…'}</p>}
-            {result && !syncing && (
+            {result && !syncing && result.uploaded === 0 && result.downloaded === 0 && (
+              <p className="text-emerald-400 text-xs">Everything is up to date</p>
+            )}
+            {result && !syncing && (result.uploaded > 0 || result.downloaded > 0) && (
               <p className="text-slate-400 text-xs">
                 ↑ {result.uploaded} uploaded · ↓ {result.downloaded} downloaded
               </p>
