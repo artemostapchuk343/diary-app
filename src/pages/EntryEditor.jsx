@@ -4,8 +4,48 @@ import { ArrowLeft, Trash2, Paperclip, X, Image } from 'lucide-react'
 import { db } from '../db'
 import { format } from 'date-fns'
 import MoodPicker from '../components/MoodPicker'
-import { useSync } from '../useSync'
-import { isSignedIn, markEntryDeleted } from '../googleDrive'
+import { isSignedIn, markEntryDeleted, uploadSingleEntry, restoreAndUpload } from '../googleDrive'
+
+const STATUS_LABEL = {
+  idle: 'Save',
+  saving: 'Saving…',
+  uploading: 'Uploading…',
+  done: 'Saved ✓',
+  error: 'Save',
+}
+
+function DeletedPromptModal({ onRestore, onKeepLocal, onCancel }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
+      <div className="bg-[#1a1a22] border border-white/10 rounded-2xl p-6 w-full max-w-sm">
+        <h2 className="text-white text-lg font-semibold mb-2">Note was previously deleted</h2>
+        <p className="text-slate-400 text-sm mb-6">
+          This note was deleted from Drive on another device. Do you want to upload it again as a new note, or keep it only on this device?
+        </p>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={onRestore}
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-base font-medium rounded-xl py-3 transition-colors"
+          >
+            Upload as new note
+          </button>
+          <button
+            onClick={onKeepLocal}
+            className="w-full bg-white/5 hover:bg-white/10 text-slate-300 text-base font-medium rounded-xl py-3 transition-colors"
+          >
+            Keep on this device only
+          </button>
+          <button
+            onClick={onCancel}
+            className="w-full text-slate-500 hover:text-slate-300 text-sm py-2 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function EntryEditor() {
   const { id } = useParams()
@@ -17,10 +57,9 @@ export default function EntryEditor() {
   const [body, setBody] = useState('')
   const [mood, setMood] = useState('')
   const [attachments, setAttachments] = useState([])
-  const [saving, setSaving] = useState(false)
-  // Stable cross-device metadata for this entry
+  const [saveStatus, setSaveStatus] = useState('idle')
   const [entryMeta, setEntryMeta] = useState(null)
-  const triggerSync = useSync(s => s.trigger)
+  const [deletedPromptEntry, setDeletedPromptEntry] = useState(null)
 
   useEffect(() => {
     if (!isNew) loadEntry()
@@ -38,23 +77,60 @@ export default function EntryEditor() {
   }
 
   async function save() {
-    setSaving(true)
+    if (saveStatus !== 'idle' && saveStatus !== 'error') return
+    setSaveStatus('saving')
     const now = new Date().toISOString()
-    if (isNew) {
-      const newId = await db.entries.add({ title, body, mood, createdAt: now, updatedAt: now })
-      for (const att of attachments) {
-        if (!att.id) await db.attachments.add({ ...att, entryId: newId })
+    let savedMeta = entryMeta
+
+    try {
+      if (isNew) {
+        const newId = await db.entries.add({ title, body, mood, createdAt: now, updatedAt: now })
+        for (const att of attachments) {
+          if (!att.id) await db.attachments.add({ ...att, entryId: newId })
+        }
+        savedMeta = { id: newId, sourceId: null, createdAt: now }
+        setEntryMeta(savedMeta)
+        navigate(`/entry/${newId}`, { replace: true })
+      } else {
+        await db.entries.update(Number(id), { title, body, mood, updatedAt: now })
+        for (const att of attachments) {
+          if (!att.id) await db.attachments.add({ ...att, entryId: Number(id) })
+        }
       }
-      setEntryMeta({ id: newId, sourceId: null, createdAt: now })
-      navigate(`/entry/${newId}`, { replace: true })
-    } else {
-      await db.entries.update(Number(id), { title, body, mood, updatedAt: now })
-      for (const att of attachments) {
-        if (!att.id) await db.attachments.add({ ...att, entryId: Number(id) })
+
+      if (isSignedIn() && savedMeta) {
+        setSaveStatus('uploading')
+        const entry = { ...savedMeta, title, body, mood, updatedAt: now }
+        const result = await uploadSingleEntry(entry)
+        if (result.status === 'previously_deleted') {
+          setDeletedPromptEntry(entry)
+          setSaveStatus('idle')
+          return
+        }
       }
+
+      setSaveStatus('done')
+      setTimeout(() => setSaveStatus('idle'), 2000)
+    } catch (e) {
+      console.error('Save failed:', e)
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 3000)
     }
-    setSaving(false)
-    triggerSync(true)
+  }
+
+  async function handleRestore() {
+    if (!deletedPromptEntry) return
+    setDeletedPromptEntry(null)
+    setSaveStatus('uploading')
+    try {
+      await restoreAndUpload(deletedPromptEntry)
+      setSaveStatus('done')
+      setTimeout(() => setSaveStatus('idle'), 2000)
+    } catch (e) {
+      console.error('Restore failed:', e)
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    }
   }
 
   async function deleteEntry() {
@@ -89,10 +165,20 @@ export default function EntryEditor() {
     return att.type?.startsWith('image/')
   }
 
+  const busy = saveStatus === 'saving' || saveStatus === 'uploading'
+
   return (
     <div className="min-h-screen bg-[#0f0f13] flex flex-col max-w-2xl mx-auto px-6 py-8">
+      {deletedPromptEntry && (
+        <DeletedPromptModal
+          onRestore={handleRestore}
+          onKeepLocal={() => setDeletedPromptEntry(null)}
+          onCancel={() => setDeletedPromptEntry(null)}
+        />
+      )}
+
       <div className="flex items-center justify-between mb-8">
-        <button onClick={() => { navigate('/'); triggerSync(true) }} className="text-slate-400 hover:text-white transition-colors">
+        <button onClick={() => navigate('/')} className="text-slate-400 hover:text-white transition-colors">
           <ArrowLeft size={26} />
         </button>
         <div className="flex items-center gap-4">
@@ -100,16 +186,17 @@ export default function EntryEditor() {
             {format(new Date(), 'MMM d, yyyy')}
           </span>
           {!isNew && (
-            <button onClick={deleteEntry} className="text-slate-500 hover:text-red-400 transition-colors">
+            <button onClick={deleteEntry} disabled={busy} className="text-slate-500 hover:text-red-400 disabled:opacity-30 transition-colors">
               <Trash2 size={22} />
             </button>
           )}
           <button
             onClick={save}
-            disabled={saving}
-            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-base font-medium px-5 py-2 rounded-lg transition-colors"
+            disabled={busy}
+            className={`text-white text-base font-medium px-5 py-2 rounded-lg transition-colors disabled:opacity-70
+              ${saveStatus === 'done' ? 'bg-green-600' : saveStatus === 'error' ? 'bg-red-600' : 'bg-indigo-600 hover:bg-indigo-500'}`}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {STATUS_LABEL[saveStatus]}
           </button>
         </div>
       </div>

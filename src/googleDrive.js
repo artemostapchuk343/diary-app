@@ -301,9 +301,37 @@ export async function markEntryDeleted(entry) {
 }
 
 export async function uploadSingleEntry(entry) {
+  if (!accessToken) return { status: 'not_connected' }
+  try {
+    const folderId = await getOrCreateFolder()
+    const cid = canonicalId(entry)
+
+    // Check tombstone first
+    const { ids: deletedIds } = await getDeletedIds(folderId)
+    if (deletedIds.includes(cid)) return { status: 'previously_deleted' }
+
+    const driveFiles = await listDriveEntries(folderId)
+    const existing = driveFiles.find(f => f.appProperties?.entryId === cid)
+    const content = entryToMarkdown(entry)
+    await uploadFile(folderId, content, entry, existing?.id || null)
+    return { status: 'ok' }
+  } catch (e) {
+    console.error('uploadSingleEntry failed:', e)
+    return { status: 'error', message: e.message }
+  }
+}
+
+export async function restoreAndUpload(entry) {
   if (!accessToken) return
   const folderId = await getOrCreateFolder()
   const cid = canonicalId(entry)
+
+  // Remove from tombstone so other devices don't delete it
+  const { ids, fileId } = await getDeletedIds(folderId)
+  if (ids.includes(cid)) {
+    await saveDeletedIds(folderId, ids.filter(id => id !== cid), fileId)
+  }
+
   const driveFiles = await listDriveEntries(folderId)
   const existing = driveFiles.find(f => f.appProperties?.entryId === cid)
   const content = entryToMarkdown(entry)
