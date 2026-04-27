@@ -147,6 +147,7 @@ export default function EntryEditor() {
   const [translateError, setTranslateError] = useState('')
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(null)
+  const [editing, setEditing] = useState(isNew)
 
   useEffect(() => {
     if (!isNew) loadEntry()
@@ -261,12 +262,27 @@ export default function EntryEditor() {
 
       setSaveStatus('done')
       setDirty(false)
-      setTimeout(() => setSaveStatus('idle'), 2000)
+      setTimeout(() => { setSaveStatus('idle'); setEditing(false) }, 2000)
     } catch (e) {
       console.error('Save failed:', e)
       setSaveStatus('error')
       setTimeout(() => setSaveStatus('idle'), 3000)
     }
+  }
+
+  function cancelEdit() {
+    if (isNew) { navigate('/'); return }
+    if (activeLang) {
+      const saved = entryData?.translations?.[activeLang]
+      setTitle(saved?.title || '')
+      setBody(saved?.body || '')
+    } else {
+      setTitle(entryData?.title || '')
+      setBody(entryData?.body || '')
+      setMood(entryData?.mood || '')
+    }
+    setDirty(false)
+    setEditing(false)
   }
 
   async function handleRestore() {
@@ -390,11 +406,12 @@ export default function EntryEditor() {
         />
       )}
 
+      {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <button onClick={() => navigate('/')} className="text-slate-400 hover:text-white transition-colors">
           <ArrowLeft size={26} />
         </button>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <span className="text-slate-500 text-sm">
             {format(entryData ? new Date(entryData.createdAt) : new Date(), 'MMM d, yyyy')}
           </span>
@@ -403,30 +420,60 @@ export default function EntryEditor() {
               <Trash2 size={22} />
             </button>
           )}
-          <button
-            onClick={save}
-            disabled={saveDisabled}
-            className={`text-white text-base font-medium px-5 py-2 rounded-lg transition-colors disabled:opacity-40
-              ${saveStatus === 'done' ? 'bg-green-600' : saveStatus === 'error' ? 'bg-red-600' : 'bg-indigo-600 hover:bg-indigo-500'}`}
-          >
-            {STATUS_LABEL[saveStatus]}
-          </button>
+          {editing ? (
+            <>
+              <button
+                onClick={cancelEdit}
+                className="text-slate-400 hover:text-white text-base font-medium px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={save}
+                disabled={saveDisabled}
+                className={`text-white text-base font-medium px-5 py-2 rounded-lg transition-colors disabled:opacity-40
+                  ${saveStatus === 'done' ? 'bg-green-600' : saveStatus === 'error' ? 'bg-red-600' : 'bg-indigo-600 hover:bg-indigo-500'}`}
+              >
+                {STATUS_LABEL[saveStatus]}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setEditing(true)}
+              className="text-white text-base font-medium px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors"
+            >
+              Edit
+            </button>
+          )}
         </div>
       </div>
 
-      <input
-        type="text"
-        placeholder="Title"
-        value={title}
-        onChange={e => { setTitle(e.target.value); setDirty(true) }}
-        className="bg-transparent text-white text-3xl font-semibold placeholder-slate-600 outline-none border-none mb-4 w-full"
-      />
+      {/* Title */}
+      {editing ? (
+        <input
+          type="text"
+          placeholder="Title"
+          value={title}
+          onChange={e => { setTitle(e.target.value); setDirty(true) }}
+          className="bg-transparent text-white text-3xl font-semibold placeholder-slate-600 outline-none border-none mb-4 w-full"
+          autoFocus={isNew}
+        />
+      ) : (
+        <h1 className="text-white text-3xl font-semibold mb-4 leading-snug">
+          {title || <span className="text-slate-600">Untitled</span>}
+        </h1>
+      )}
 
+      {/* Mood + language row */}
       <div className="mb-4 flex items-center gap-3 flex-wrap">
-        {!activeLang
-          ? <MoodPicker value={mood} onChange={v => { setMood(v); setDirty(true) }} />
-          : mood && <span className="text-2xl">{mood}</span>
-        }
+        {!activeLang && editing && (
+          <MoodPicker value={mood} onChange={v => { setMood(v); setDirty(true) }} />
+        )}
+        {!activeLang && !editing && mood && (
+          <span className="text-2xl">{mood}</span>
+        )}
+        {activeLang && mood && <span className="text-2xl">{mood}</span>}
+
         {!isNew && (
           <div className="flex items-center gap-1.5 ml-auto">
             <Languages size={15} className="text-slate-500 shrink-0" />
@@ -447,24 +494,30 @@ export default function EntryEditor() {
       {activeLang && (
         <p className="text-xs text-slate-500 mb-3">
           {LANGS.find(l => l.code === activeLang)?.name} translation
-          {entryData?.translations?.[activeLang] ? ' · saved' : ' · not saved yet — click Save to keep it'}
+          {entryData?.translations?.[activeLang] ? ' · saved' : ' · not saved yet — click Edit then Save to keep it'}
         </p>
       )}
 
       {translateError && <p className="text-red-400 text-xs mb-3">{translateError}</p>}
 
-      <textarea
-        placeholder="Write your thoughts…"
-        value={body}
-        onChange={e => { setBody(e.target.value); setDirty(true) }}
-        className="flex-1 bg-transparent text-slate-200 placeholder-slate-600 outline-none border-none resize-none text-lg leading-relaxed min-h-72 w-full"
-        autoFocus={isNew}
-      />
+      {/* Body */}
+      {editing ? (
+        <textarea
+          placeholder="Write your thoughts…"
+          value={body}
+          onChange={e => { setBody(e.target.value); setDirty(true) }}
+          className="flex-1 bg-transparent text-slate-200 placeholder-slate-600 outline-none border-none resize-none text-lg leading-relaxed min-h-72 w-full"
+        />
+      ) : (
+        <div className="flex-1 text-slate-200 text-lg leading-relaxed whitespace-pre-wrap min-h-72">
+          {body || <span className="text-slate-600">No content</span>}
+        </div>
+      )}
 
+      {/* Attachments */}
       {!activeLang && attachments.length > 0 && (
         <div className="mt-5 grid grid-cols-2 gap-3">
           {attachments.map((att, i) => {
-            const isMedia = att.type?.startsWith('image/') || att.type?.startsWith('video/')
             const mediaList = attachments.filter(a => a.type?.startsWith('image/') || a.type?.startsWith('video/'))
             const mediaIdx = mediaList.indexOf(att)
             return (
@@ -494,12 +547,14 @@ export default function EntryEditor() {
                     <span className="text-slate-300 text-sm truncate">{att.name}</span>
                   </div>
                 )}
-                <button
-                  onClick={() => removeAttachment(att)}
-                  className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all"
-                >
-                  <X size={12} />
-                </button>
+                {editing && (
+                  <button
+                    onClick={() => removeAttachment(att)}
+                    className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
               </div>
             )
           })}
@@ -514,7 +569,8 @@ export default function EntryEditor() {
         />
       )}
 
-      {!activeLang && (
+      {/* Photo / File buttons — edit mode only */}
+      {!activeLang && editing && (
         <div className="mt-5 pt-5 border-t border-white/10 flex items-center gap-5">
           <input ref={photoRef} type="file" multiple accept="image/*,video/*" className="hidden" onChange={e => handleFiles(e.target.files)} />
           <input ref={fileRef} type="file" multiple className="hidden" onChange={e => handleFiles(e.target.files)} />
