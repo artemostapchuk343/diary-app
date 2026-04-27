@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Trash2, Paperclip, X, Image, Languages } from 'lucide-react'
+import MediaLightbox from '../components/MediaLightbox'
 import { db } from '../db'
 import { format } from 'date-fns'
 import MoodPicker from '../components/MoodPicker'
@@ -145,6 +146,7 @@ export default function EntryEditor() {
   const [translating, setTranslating] = useState(false)
   const [translateError, setTranslateError] = useState('')
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(null)
 
   useEffect(() => {
     if (!isNew) loadEntry()
@@ -461,25 +463,55 @@ export default function EntryEditor() {
 
       {!activeLang && attachments.length > 0 && (
         <div className="mt-5 grid grid-cols-2 gap-3">
-          {attachments.map((att, i) => (
-            <div key={i} className="relative bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-              {att.type?.startsWith('image/') ? (
-                <img src={att.data} alt={att.name} className="w-full h-40 object-cover" />
-              ) : (
-                <div className="flex items-center gap-3 p-4">
-                  <Paperclip size={16} className="text-slate-400 shrink-0" />
-                  <span className="text-slate-300 text-sm truncate">{att.name}</span>
-                </div>
-              )}
-              <button
-                onClick={() => removeAttachment(att)}
-                className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-red-600 transition-colors"
-              >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
+          {attachments.map((att, i) => {
+            const isMedia = att.type?.startsWith('image/') || att.type?.startsWith('video/')
+            const mediaList = attachments.filter(a => a.type?.startsWith('image/') || a.type?.startsWith('video/'))
+            const mediaIdx = mediaList.indexOf(att)
+            return (
+              <div key={i} className="relative bg-white/5 border border-white/10 rounded-xl overflow-hidden group">
+                {att.type?.startsWith('image/') ? (
+                  <img
+                    src={att.data}
+                    alt={att.name}
+                    onClick={() => setLightboxIndex(mediaIdx)}
+                    className="w-full h-40 object-cover cursor-zoom-in"
+                  />
+                ) : att.type?.startsWith('video/') ? (
+                  <div
+                    onClick={() => setLightboxIndex(mediaIdx)}
+                    className="w-full h-40 bg-black flex items-center justify-center cursor-pointer relative"
+                  >
+                    <video src={att.data} className="w-full h-full object-cover opacity-70" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center">
+                        <div className="w-0 h-0 border-t-[8px] border-b-[8px] border-l-[14px] border-t-transparent border-b-transparent border-l-white ml-1" />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 p-4">
+                    <Paperclip size={16} className="text-slate-400 shrink-0" />
+                    <span className="text-slate-300 text-sm truncate">{att.name}</span>
+                  </div>
+                )}
+                <button
+                  onClick={() => removeAttachment(att)}
+                  className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-all"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            )
+          })}
         </div>
+      )}
+
+      {lightboxIndex !== null && (
+        <MediaLightbox
+          media={attachments.filter(a => a.type?.startsWith('image/') || a.type?.startsWith('video/'))}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
 
       {!activeLang && (
