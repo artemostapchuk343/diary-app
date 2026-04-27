@@ -148,6 +148,7 @@ export default function EntryEditor() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(null)
   const [editing, setEditing] = useState(isNew)
+  const [detectedLang, setDetectedLang] = useState(null)
 
   useEffect(() => {
     if (!isNew) loadEntry()
@@ -161,13 +162,29 @@ export default function EntryEditor() {
     setBody(entry.body || '')
     setMood(entry.mood || '')
     setActiveLang(null)
+    setDetectedLang(null)
     setDirty(false)
     const files = await db.attachments.where('entryId').equals(Number(id)).toArray()
     setAttachments(files)
+    detectLanguage(entry.body || entry.title || '')
+  }
+
+  function detectLanguage(text) {
+    const sample = text.slice(0, 200).trim()
+    if (!sample) return
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(sample)}`
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        const lang = data[2]
+        if (lang && LANGS.some(l => l.code === lang)) setDetectedLang(lang)
+      })
+      .catch(() => {})
   }
 
   async function handleLangClick(lang) {
     if (translating) return
+    if (detectedLang === lang) return
 
     // Clicking the active lang returns to primary
     if (activeLang === lang) {
@@ -380,8 +397,10 @@ export default function EntryEditor() {
 
   function langButtonClass(code) {
     const isActive = activeLang === code
+    const isCurrent = detectedLang === code
     const isSaved = !!entryData?.translations?.[code]
     if (isActive) return 'bg-indigo-600 text-white'
+    if (isCurrent) return 'bg-white/5 text-slate-500 border border-white/10 opacity-50 cursor-default'
     if (isSaved) return 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/40'
     return 'bg-white/5 text-slate-500 hover:text-slate-300 hover:bg-white/10'
   }
@@ -482,6 +501,7 @@ export default function EntryEditor() {
                 key={code}
                 onClick={() => handleLangClick(code)}
                 disabled={translating}
+                title={detectedLang === code ? 'Entry is already in this language' : undefined}
                 className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50 ${langButtonClass(code)}`}
               >
                 {translating && activeLang === code ? '…' : label}
