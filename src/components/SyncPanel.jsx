@@ -3,10 +3,26 @@ import { Cloud, CloudOff, RefreshCw, LogOut, AlertCircle } from 'lucide-react'
 import { isConfigured, isSignedIn, signIn, signOut, silentSignIn } from '../googleDrive'
 import { useSync } from '../useSync'
 
+function relativeTime(ts) {
+  const diff = Math.floor((Date.now() - ts) / 1000)
+  if (diff < 60) return 'just now'
+  const mins = Math.floor(diff / 60)
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.floor(diff / 3600)
+  if (hrs < 24) return `${hrs} hr ago`
+  return `${Math.floor(diff / 86400)} d ago`
+}
+
 export default function SyncPanel() {
   const [connected, setConnected] = useState(isSignedIn())
   const [connectError] = useState('')
+  const [, setTick] = useState(0)
   const { syncing, progress, lastSync, error, result, trigger } = useSync()
+
+  useEffect(() => {
+    const t = setInterval(() => setTick(n => n + 1), 30_000)
+    return () => clearInterval(t)
+  }, [])
 
   useEffect(() => {
     if (!isConfigured()) return
@@ -49,16 +65,16 @@ export default function SyncPanel() {
             <p className="text-white text-sm font-medium">
               {connected ? 'Google Drive connected' : 'Google Drive'}
             </p>
-            {connected && !syncing && lastSyncLabel && !result && (
+            {connected && !syncing && !result && lastSyncLabel && (
               <p className="text-slate-500 text-xs">Last sync: {lastSyncLabel}</p>
             )}
             {syncing && <p className="text-slate-400 text-xs">{progress || 'Syncing…'}</p>}
             {result && !syncing && result.uploaded === 0 && result.downloaded === 0 && (
-              <p className="text-emerald-400 text-xs">Everything is up to date</p>
+              <p className="text-emerald-400 text-xs">Up to date · {lastSync ? relativeTime(lastSync) : ''}</p>
             )}
             {result && !syncing && (result.uploaded > 0 || result.downloaded > 0) && (
               <p className="text-slate-400 text-xs">
-                ↑ {result.uploaded} uploaded · ↓ {result.downloaded} downloaded
+                ↑ {result.uploaded} · ↓ {result.downloaded} · {lastSync ? relativeTime(lastSync) : ''}
               </p>
             )}
           </div>

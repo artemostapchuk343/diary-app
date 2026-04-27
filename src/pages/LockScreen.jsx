@@ -41,7 +41,7 @@ export default function LockScreen() {
       <div className="w-full max-w-md px-8">
         <div className="flex flex-col items-center mb-10">
           <div className="mb-5">
-            <ProfilePic size="lg" editable />
+            <ProfilePic size="lg" />
           </div>
           <h1 className="text-3xl font-semibold text-white">My Diary</h1>
           <p className="text-slate-400 text-base mt-2">
