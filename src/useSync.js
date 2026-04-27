@@ -25,7 +25,10 @@ export const useSync = create((set, get) => ({
       const res = await sync(entries, {
         onProgress: msg => set({ progress: msg }),
         onNewEntry: async parsed => {
+          const existing = await db.entries.where('createdAt').equals(parsed.createdAt || '').first()
+          if (existing) return
           await db.entries.add({
+            sourceId: String(parsed.id || ''),
             title: parsed.title || '',
             body: parsed.body || '',
             mood: parsed.mood || '',

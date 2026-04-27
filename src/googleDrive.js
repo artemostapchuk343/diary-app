@@ -345,7 +345,11 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
   })
 
   const localById = {}
-  localEntries.forEach(e => { localById[String(e.id)] = e })
+  const localBySourceId = {}
+  localEntries.forEach(e => {
+    localById[String(e.id)] = e
+    if (e.sourceId) localBySourceId[e.sourceId] = e
+  })
 
   // Apply remote deletions to local DB
   for (const id of deletedSet) {
@@ -376,10 +380,10 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
     onProgress?.(`Uploading… ${uploaded}/${entriesToUpload.length}`)
   }
 
-  // Download Drive → local (skip deleted)
+  // Download Drive → local (skip deleted and already-downloaded entries)
   const driveOnlyFiles = driveFiles.filter(f => {
     const eid = f.appProperties?.entryId
-    return eid && !localById[eid] && !deletedSet.has(eid)
+    return eid && !localById[eid] && !localBySourceId[eid] && !deletedSet.has(eid)
   })
 
   for (const f of driveOnlyFiles) {
