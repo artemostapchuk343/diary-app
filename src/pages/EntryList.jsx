@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Lock, BookOpen, FileUp, Calendar, LayoutList, AlignJustify, Paperclip, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Search, Lock, FileUp, Calendar, LayoutList, AlignJustify, Paperclip, ChevronLeft, ChevronRight } from 'lucide-react'
 import { db } from '../db'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
@@ -8,6 +8,7 @@ import {
 } from 'date-fns'
 import { useAuth } from '../useAuth'
 import SyncPanel from '../components/SyncPanel'
+import ProfilePic from '../components/ProfilePic'
 import { useSync } from '../useSync'
 import { markdownToEntry } from '../googleDrive'
 
@@ -326,7 +327,7 @@ export default function EntryList() {
 
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-          <BookOpen size={28} className="text-indigo-400" />
+          <ProfilePic size="sm" editable />
           <h1 className="text-2xl font-semibold text-white">My Diary</h1>
         </div>
         <div className="flex items-center gap-2">

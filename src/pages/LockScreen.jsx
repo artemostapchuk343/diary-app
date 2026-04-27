@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Lock, Eye, EyeOff, Cloud } from 'lucide-react'
+import { Eye, EyeOff, Cloud } from 'lucide-react'
+import ProfilePic from '../components/ProfilePic'
 import { verifyPassword, savePasswordVerifier, hasPassword, getPasswordConfig } from '../crypto'
 import { useAuth } from '../useAuth'
 import { isConfigured, signIn as driveSignIn } from '../googleDrive'
@@ -39,8 +40,8 @@ export default function LockScreen() {
     <div className="min-h-screen flex items-center justify-center relative" style={{ zIndex: 1 }}>
       <div className="w-full max-w-md px-8">
         <div className="flex flex-col items-center mb-10">
-          <div className="w-20 h-20 rounded-2xl bg-indigo-600 flex items-center justify-center mb-5">
-            <Lock size={36} className="text-white" />
+          <div className="mb-5">
+            <ProfilePic size="lg" editable />
           </div>
           <h1 className="text-3xl font-semibold text-white">My Diary</h1>
           <p className="text-slate-400 text-base mt-2">
