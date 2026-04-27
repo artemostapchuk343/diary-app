@@ -123,8 +123,9 @@ function CompactCard({ entry, hasAttachment, onClick }) {
   )
 }
 
-function CalendarView({ entries, attachedEntryIds, navigate, month, onMonthChange }) {
-  const [selectedDay, setSelectedDay] = useState(null)
+function CalendarSidebar({ entries, attachedEntryIds, navigate }) {
+  const [month, setMonth] = useState(new Date())
+  const [selectedDay, setSelectedDay] = useState(format(new Date(), 'yyyy-MM-dd'))
 
   const byDate = {}
   entries.forEach(e => {
@@ -139,48 +140,45 @@ function CalendarView({ entries, attachedEntryIds, navigate, month, onMonthChang
   const end = endOfWeek(endOfMonth(month), { weekStartsOn: 1 })
   const days = []
   let cur = start
-  while (cur <= end) {
-    days.push(cur)
-    cur = addDays(cur, 1)
-  }
+  while (cur <= end) { days.push(cur); cur = addDays(cur, 1) }
 
   function handleDayClick(day) {
     const key = format(day, 'yyyy-MM-dd')
-    const dayEntries = byDate[key] || []
-    if (!dayEntries.length) return
-    if (dayEntries.length === 1) {
-      navigate(`/entry/${dayEntries[0].id}`)
-    } else {
-      setSelectedDay(prev => prev === key ? null : key)
-    }
-  }
-
-  function handleMonthChange(dir) {
-    onMonthChange(dir === -1 ? subMonths(month, 1) : addMonths(month, 1))
-    setSelectedDay(null)
+    setSelectedDay(prev => prev === key ? null : key)
+    // navigate into month if clicking an out-of-month day
+    if (!isSameMonth(day, month)) setMonth(startOfMonth(day))
   }
 
   const selectedEntries = selectedDay ? (byDate[selectedDay] || []) : []
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={() => handleMonthChange(-1)} className="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-white/5">
-          <ChevronLeft size={20} />
+    <div className="bg-white/[0.05] border border-white/[0.09] rounded-2xl p-4">
+      {/* Month nav */}
+      <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={() => setMonth(m => subMonths(m, 1))}
+          className="p-1.5 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+        >
+          <ChevronLeft size={16} />
         </button>
-        <h2 className="text-white font-semibold">{format(month, 'MMMM yyyy')}</h2>
-        <button onClick={() => handleMonthChange(1)} className="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-white/5">
-          <ChevronRight size={20} />
+        <span className="text-white text-sm font-semibold">{format(month, 'MMMM yyyy')}</span>
+        <button
+          onClick={() => setMonth(m => addMonths(m, 1))}
+          className="p-1.5 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+        >
+          <ChevronRight size={16} />
         </button>
       </div>
 
+      {/* Day-of-week headers */}
       <div className="grid grid-cols-7 mb-1">
-        {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(d => (
-          <div key={d} className="text-center text-slate-500 text-xs py-1">{d}</div>
+        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+          <div key={i} className="text-center text-slate-500 text-[11px] py-1">{d}</div>
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
+      {/* Day cells */}
+      <div className="grid grid-cols-7 gap-px">
         {days.map((day, i) => {
           const key = format(day, 'yyyy-MM-dd')
           const dayEntries = byDate[key] || []
@@ -193,61 +191,73 @@ function CalendarView({ entries, attachedEntryIds, navigate, month, onMonthChang
             <button
               key={i}
               onClick={() => handleDayClick(day)}
-              disabled={!hasEntries}
-              className={`flex flex-col items-center pt-1.5 pb-2 rounded-xl min-h-[56px] transition-colors
-                ${!inMonth ? 'opacity-25' : ''}
-                ${selected ? 'bg-indigo-600/30 ring-1 ring-indigo-500/50' : today ? 'ring-1 ring-indigo-500/60' : ''}
-                ${hasEntries && !selected ? 'bg-white/5 hover:bg-white/10 cursor-pointer' : ''}
-                ${!hasEntries ? 'cursor-default' : ''}
+              className={`flex flex-col items-center py-1 rounded-lg transition-colors
+                ${!inMonth ? 'opacity-30' : ''}
+                ${selected ? 'bg-indigo-600/35 ring-1 ring-inset ring-indigo-500/50' : today ? 'ring-1 ring-inset ring-indigo-500/50' : ''}
+                ${hasEntries && !selected ? 'hover:bg-white/8 cursor-pointer' : 'cursor-default'}
               `}
             >
-              <span className={`text-xs font-medium ${today ? 'text-indigo-400' : inMonth ? 'text-slate-300' : 'text-slate-600'}`}>
+              <span className={`text-[11px] font-medium leading-5
+                ${today ? 'text-indigo-400' : inMonth ? 'text-slate-300' : 'text-slate-600'}
+              `}>
                 {format(day, 'd')}
               </span>
-              {hasEntries && (
-                <div className="flex flex-col items-center mt-0.5 gap-px">
-                  {dayEntries.slice(0, 2).map((e, j) =>
-                    e.mood
-                      ? <span key={j} className="text-sm leading-tight">{e.mood}</span>
-                      : <span key={j} className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-0.5" />
-                  )}
-                  {dayEntries.length > 2 && (
-                    <span className="text-slate-500 text-[9px] leading-tight">+{dayEntries.length - 2}</span>
-                  )}
-                </div>
-              )}
+              <div className="h-3 flex items-center justify-center">
+                {hasEntries && (
+                  dayEntries[0].mood
+                    ? <span className="text-[10px] leading-none">{dayEntries[0].mood}</span>
+                    : <span className="w-1 h-1 rounded-full bg-indigo-400 block" />
+                )}
+              </div>
             </button>
           )
         })}
       </div>
 
-      {selectedDay && (
-        <div className="mt-5 space-y-2">
-          <p className="text-slate-500 text-sm mb-3">{format(parseISO(selectedDay), 'd MMMM yyyy')}</p>
-          {selectedEntries.map(e => (
-            <button
-              key={e.id}
-              onClick={() => navigate(`/entry/${e.id}`)}
-              className="w-full text-left bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl p-4 transition-colors flex items-center gap-3"
-            >
-              {e.mood && <span className="text-xl shrink-0">{e.mood}</span>}
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-medium text-sm truncate">{e.title || 'Untitled'}</p>
-                {e.body && <p className="text-slate-400 text-xs mt-0.5 truncate">{e.body}</p>}
+      {/* Selected day entries */}
+      <div className="mt-4 pt-4 border-t border-white/8">
+        {selectedDay ? (
+          <>
+            <p className="text-slate-500 text-xs mb-2.5">
+              {format(parseISO(selectedDay), 'd MMMM yyyy')}
+              {selectedEntries.length > 0 && (
+                <span className="ml-1 text-slate-600">· {selectedEntries.length} {selectedEntries.length === 1 ? 'entry' : 'entries'}</span>
+              )}
+            </p>
+            {selectedEntries.length > 0 ? (
+              <div className="space-y-1.5">
+                {selectedEntries.map(e => (
+                  <button
+                    key={e.id}
+                    onClick={() => navigate(`/entry/${e.id}`)}
+                    className="w-full text-left bg-white/5 hover:bg-white/10 border border-white/8 rounded-xl p-3 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 mb-0.5">
+                      {e.mood && <span className="text-base shrink-0">{e.mood}</span>}
+                      <span className="text-white text-xs font-semibold truncate">{e.title || 'Untitled'}</span>
+                      {attachedEntryIds.has(e.id) && <Paperclip size={11} className="text-slate-500 shrink-0 ml-auto" />}
+                    </div>
+                    {e.body && (
+                      <p className="text-slate-500 text-xs leading-relaxed line-clamp-2">{e.body}</p>
+                    )}
+                  </button>
+                ))}
               </div>
-              {attachedEntryIds.has(e.id) && <Paperclip size={13} className="text-slate-500 shrink-0" />}
-            </button>
-          ))}
-        </div>
-      )}
+            ) : (
+              <p className="text-slate-600 text-xs">No entries this day.</p>
+            )}
+          </>
+        ) : (
+          <p className="text-slate-600 text-xs">Select a day to see entries.</p>
+        )}
+      </div>
     </div>
   )
 }
 
 const VIEW_MODES = [
-  { id: 'normal',   Icon: LayoutList,   title: 'List view' },
-  { id: 'compact',  Icon: AlignJustify, title: 'Compact view' },
-  { id: 'calendar', Icon: Calendar,     title: 'Calendar view' },
+  { id: 'normal',  Icon: LayoutList,   title: 'List view' },
+  { id: 'compact', Icon: AlignJustify, title: 'Compact view' },
 ]
 
 export default function EntryList() {
@@ -256,8 +266,11 @@ export default function EntryList() {
   const [query, setQuery] = useState('')
   const [importing, setImporting] = useState(false)
   const [pendingFiles, setPendingFiles] = useState(null)
-  const [viewMode, setViewMode] = useState(() => localStorage.getItem('diary_view') || 'normal')
-  const [calMonth, setCalMonth] = useState(new Date())
+  const [viewMode, setViewMode] = useState(() => {
+    const saved = localStorage.getItem('diary_view')
+    // migrate away from old 'calendar' value
+    return (saved === 'calendar' || !saved) ? 'normal' : saved
+  })
   const importRef = useRef()
   const navigate = useNavigate()
   const lock = useAuth(s => s.lock)
@@ -320,84 +333,77 @@ export default function EntryList() {
     : entries
 
   return (
-    <div className="min-h-screen flex flex-col max-w-2xl mx-auto px-6 py-8 relative" style={{ zIndex: 1 }}>
+    <div className="min-h-screen py-8 px-4 md:px-8 relative" style={{ zIndex: 1 }}>
       {pendingFiles && (
         <ImportModal files={pendingFiles} onConfirm={confirmImport} onCancel={() => setPendingFiles(null)} />
       )}
 
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <ProfilePic size="sm" editable />
-          <h1 className="text-2xl font-semibold text-white">My Diary</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-white/5 rounded-lg p-1 gap-px mr-1">
-            {VIEW_MODES.map(({ id, Icon, title }) => (
-              <button
-                key={id}
-                onClick={() => setView(id)}
-                title={title}
-                className={`p-1.5 rounded-md transition-colors ${viewMode === id ? 'bg-white/15 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-              >
-                <Icon size={16} />
-              </button>
-            ))}
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <ProfilePic size="sm" editable />
+            <h1 className="text-2xl font-semibold text-white">My Diary</h1>
           </div>
-          <button
-            onClick={() => navigate('/entry/new')}
-            title="New entry"
-            className="text-slate-500 hover:text-white transition-colors"
-          >
-            <Plus size={22} />
-          </button>
-          <button
-            onClick={() => importRef.current.click()}
-            disabled={importing}
-            title="Import from file"
-            className="text-slate-500 hover:text-slate-300 disabled:opacity-50 transition-colors"
-          >
-            <FileUp size={20} />
-          </button>
-          <button onClick={lock} title="Lock" className="text-slate-500 hover:text-slate-300 transition-colors">
-            <Lock size={20} />
-          </button>
-        </div>
-        <input
-          ref={importRef}
-          type="file"
-          multiple
-          accept=".txt,.md,.markdown,.rtf,.text"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
-      </div>
-
-      <SyncPanel />
-
-      {viewMode !== 'calendar' && (
-        <div className="relative mb-5">
-          <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-white/5 rounded-lg p-1 gap-px mr-1">
+              {VIEW_MODES.map(({ id, Icon, title }) => (
+                <button
+                  key={id}
+                  onClick={() => setView(id)}
+                  title={title}
+                  className={`p-1.5 rounded-md transition-colors ${viewMode === id ? 'bg-white/15 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                  <Icon size={16} />
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => navigate('/entry/new')}
+              title="New entry"
+              className="text-slate-500 hover:text-white transition-colors"
+            >
+              <Plus size={22} />
+            </button>
+            <button
+              onClick={() => importRef.current.click()}
+              disabled={importing}
+              title="Import from file"
+              className="text-slate-500 hover:text-slate-300 disabled:opacity-50 transition-colors"
+            >
+              <FileUp size={20} />
+            </button>
+            <button onClick={lock} title="Lock" className="text-slate-500 hover:text-slate-300 transition-colors">
+              <Lock size={20} />
+            </button>
+          </div>
           <input
-            type="text"
-            placeholder="Search entries..."
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-5 py-3.5 text-white text-base placeholder-slate-500 outline-none focus:border-indigo-500"
+            ref={importRef}
+            type="file"
+            multiple
+            accept=".txt,.md,.markdown,.rtf,.text"
+            className="hidden"
+            onChange={handleFileSelect}
           />
         </div>
-      )}
 
-      <div className="flex-1">
-        {viewMode === 'calendar' ? (
-          <CalendarView
-            entries={entries}
-            attachedEntryIds={attachedEntryIds}
-            navigate={navigate}
-            month={calMonth}
-            onMonthChange={setCalMonth}
-          />
-        ) : (
-          <>
+        {/* Two-column layout */}
+        <div className="flex gap-5 items-start">
+          {/* Left — entries */}
+          <div className="flex-1 min-w-0">
+            <SyncPanel />
+
+            <div className="relative mb-5">
+              <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search entries..."
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-5 py-3.5 text-white text-base placeholder-slate-500 outline-none focus:border-indigo-500"
+              />
+            </div>
+
             {filtered.length === 0 && (
               <div className="flex flex-col items-center justify-center py-24 text-slate-500">
                 <NotebookPen size={48} className="mb-4 opacity-30" />
@@ -411,8 +417,17 @@ export default function EntryList() {
                   : <NormalCard key={entry.id} entry={entry} hasAttachment={attachedEntryIds.has(entry.id)} onClick={() => navigate(`/entry/${entry.id}`)} />
               )}
             </div>
-          </>
-        )}
+          </div>
+
+          {/* Right — calendar sidebar */}
+          <div className="w-64 shrink-0 sticky top-8">
+            <CalendarSidebar
+              entries={entries}
+              attachedEntryIds={attachedEntryIds}
+              navigate={navigate}
+            />
+          </div>
+        </div>
       </div>
     </div>
   )
