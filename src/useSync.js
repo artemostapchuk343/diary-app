@@ -20,14 +20,29 @@ export const useSync = create((set, get) => ({
     set({ syncing: true, error: '', result: null, progress: 'Syncing…' })
 
     try {
-      const entries = await db.entries.toArray()
+      const [entries, allAttachments] = await Promise.all([
+        db.entries.toArray(),
+        db.attachments.toArray(),
+      ])
 
-      const res = await sync(entries, {
+      const attsByEntryId = {}
+      allAttachments.forEach(att => {
+        if (!attsByEntryId[att.entryId]) attsByEntryId[att.entryId] = []
+        attsByEntryId[att.entryId].push(att)
+      })
+
+      const entriesWithAtts = entries.map(e => ({
+        ...e,
+        attachments: attsByEntryId[e.id] || [],
+      }))
+
+      const res = await sync(entriesWithAtts, {
         onProgress: msg => set({ progress: msg }),
         onNewEntry: async parsed => {
-          const existing = await db.entries.where('createdAt').equals(parsed.createdAt || '').first()
-          if (existing) return
-          await db.entries.add({
+          const existing = await db.entries.where('sourceId').equals(String(parsed.id || '')).first()
+            || await db.entries.where('createdAt').equals(parsed.createdAt || '').first()
+          if (existing) return existing.id
+          const newId = await db.entries.add({
             sourceId: String(parsed.id || ''),
             title: parsed.title || '',
             body: parsed.body || '',
@@ -35,14 +50,17 @@ export const useSync = create((set, get) => ({
             createdAt: parsed.createdAt || new Date().toISOString(),
             updatedAt: parsed.updatedAt || new Date().toISOString(),
           })
+          return newId
         },
-        onUpdateEntry: async (id, parsed) => {
-          await db.entries.update(id, {
-            title: parsed.title,
-            body: parsed.body,
-            mood: parsed.mood,
-            updatedAt: parsed.updatedAt,
-          })
+        onSaveAttachment: async (localEntryId, attachment) => {
+          if (!localEntryId) return
+          const existing = await db.attachments
+            .where('entryId').equals(Number(localEntryId))
+            .and(a => a.name === attachment.name)
+            .first()
+          if (!existing) {
+            await db.attachments.add({ ...attachment, entryId: Number(localEntryId) })
+          }
         },
         onDeleteEntry: async id => {
           await db.attachments.where('entryId').equals(Number(id)).delete()
@@ -61,3 +79,9 @@ export const useSync = create((set, get) => ({
     }
   },
 }))
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    useSync.getState().trigger()
+  }
+})

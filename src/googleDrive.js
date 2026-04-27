@@ -246,6 +246,49 @@ async function downloadFile(fileId) {
   return resp.text()
 }
 
+function base64ToBlob(dataUrl) {
+  const [header, base64] = dataUrl.split(',')
+  const mimeType = header.match(/:(.*?);/)[1]
+  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+  return new Blob([bytes], { type: mimeType })
+}
+
+async function downloadAttachmentAsDataUrl(fileId) {
+  const resp = await api(`/files/${fileId}?alt=media`)
+  const blob = await resp.blob()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = e => resolve(e.target.result)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function listDriveAttachments(folderId) {
+  const resp = await api(
+    `/files?q='${folderId}' in parents and trashed=false and appProperties has { key='isAttachment' and value='true' }&fields=files(id,name,mimeType,appProperties)&pageSize=1000`
+  )
+  const { files } = await resp.json()
+  return files || []
+}
+
+async function uploadAttachment(folderId, attachment, entryCanonicalId, existingFileId = null) {
+  const blob = base64ToBlob(attachment.data)
+  const metadata = {
+    name: attachment.name,
+    mimeType: attachment.type || 'application/octet-stream',
+    appProperties: { entryId: entryCanonicalId, isAttachment: 'true', attachmentName: attachment.name },
+    ...(!existingFileId && { parents: [folderId] }),
+  }
+  const form = new FormData()
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+  form.append('file', blob)
+  const url = existingFileId
+    ? `/files/${existingFileId}?uploadType=multipart`
+    : '/files?uploadType=multipart'
+  await uploadApi(url, { method: existingFileId ? 'PATCH' : 'POST', body: form })
+}
+
 const PASSWORD_FILE_NAME = '.diary-password'
 const DELETED_FILE_NAME = '.diary-deleted'
 
@@ -310,10 +353,26 @@ export async function uploadSingleEntry(entry) {
     const { ids: deletedIds } = await getDeletedIds(folderId)
     if (deletedIds.includes(cid)) return { status: 'previously_deleted' }
 
-    const driveFiles = await listDriveEntries(folderId)
+    const [driveFiles, driveAtts] = await Promise.all([
+      listDriveEntries(folderId),
+      entry.attachments?.length ? listDriveAttachments(folderId) : Promise.resolve([]),
+    ])
     const existing = driveFiles.find(f => f.appProperties?.entryId === cid)
     const content = entryToMarkdown(entry)
     await uploadFile(folderId, content, entry, existing?.id || null)
+
+    if (entry.attachments?.length) {
+      const existingAttNames = new Set(
+        driveAtts.filter(f => f.appProperties?.entryId === cid)
+                 .map(f => f.appProperties?.attachmentName)
+      )
+      for (const att of entry.attachments) {
+        if (!existingAttNames.has(att.name)) {
+          await uploadAttachment(folderId, att, cid)
+        }
+      }
+    }
+
     return { status: 'ok' }
   } catch (e) {
     console.error('uploadSingleEntry failed:', e)
@@ -378,10 +437,13 @@ export async function uploadPasswordConfig(config) {
   }
 }
 
-export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry }) {
+export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry, onSaveAttachment }) {
   const folderId = await getOrCreateFolder()
-  const driveFiles = await listDriveEntries(folderId)
-  const { ids: deletedIds, fileId: deletedFileId } = await getDeletedIds(folderId)
+  const [driveFiles, driveAttachFiles, { ids: deletedIds }] = await Promise.all([
+    listDriveEntries(folderId),
+    listDriveAttachments(folderId),
+    getDeletedIds(folderId),
+  ])
   const deletedSet = new Set(deletedIds)
 
   const driveByEntryId = {}
@@ -389,13 +451,21 @@ export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry
     if (f.appProperties?.entryId) driveByEntryId[f.appProperties.entryId] = f
   })
 
-  // Build local lookups by both DB id and canonical (source) id
-  const localByCanonicalId = {}
-  localEntries.forEach(e => {
-    localByCanonicalId[canonicalId(e)] = e
+  // { canonicalEntryId: { attachmentName: driveFile } }
+  const driveAttsByEntryId = {}
+  driveAttachFiles.forEach(f => {
+    const eid = f.appProperties?.entryId
+    const name = f.appProperties?.attachmentName
+    if (eid && name) {
+      if (!driveAttsByEntryId[eid]) driveAttsByEntryId[eid] = {}
+      driveAttsByEntryId[eid][name] = f
+    }
   })
 
-  // Apply remote deletions to local DB (match by canonical id)
+  const localByCanonicalId = {}
+  localEntries.forEach(e => { localByCanonicalId[canonicalId(e)] = e })
+
+  // Apply remote deletions
   for (const id of deletedSet) {
     const localEntry = localByCanonicalId[id]
     if (localEntry) {
@@ -404,7 +474,6 @@ export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry
     }
   }
 
-  // Upload local → Drive, skip entries marked deleted on another device
   const entriesToUpload = localEntries.filter(e => !deletedSet.has(canonicalId(e)))
   let uploaded = 0, downloaded = 0
 
@@ -412,6 +481,7 @@ export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry
     const cid = canonicalId(entry)
     const driveFile = driveByEntryId[cid]
     const content = entryToMarkdown(entry)
+
     if (driveFile) {
       const driveTime = new Date(driveFile.modifiedTime).getTime()
       const localTime = new Date(entry.updatedAt).getTime()
@@ -423,10 +493,39 @@ export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry
       await uploadFile(folderId, content, entry)
       uploaded++
     }
+
+    const driveAttsForEntry = driveAttsByEntryId[cid] || {}
+    const driveAttNames = new Set(Object.keys(driveAttsForEntry))
+    const localAttNames = new Set((entry.attachments || []).map(a => a.name))
+
+    // Upload local attachments not yet on Drive
+    for (const att of (entry.attachments || [])) {
+      if (!driveAttNames.has(att.name)) {
+        await uploadAttachment(folderId, att, cid)
+      }
+    }
+
+    // Download Drive attachments not yet local
+    for (const [attName, driveAtt] of Object.entries(driveAttsForEntry)) {
+      if (!localAttNames.has(attName)) {
+        try {
+          const dataUrl = await downloadAttachmentAsDataUrl(driveAtt.id)
+          await onSaveAttachment?.(entry.id, {
+            name: driveAtt.appProperties.attachmentName,
+            type: driveAtt.mimeType,
+            data: dataUrl,
+            size: 0,
+          })
+        } catch (e) {
+          console.error('Failed to download attachment:', attName, e)
+        }
+      }
+    }
+
     onProgress?.(`Uploading… ${uploaded}/${entriesToUpload.length}`)
   }
 
-  // Download Drive → local: only entries not already present and not deleted
+  // Download new entries + their attachments
   const driveOnlyFiles = driveFiles.filter(f => {
     const eid = f.appProperties?.entryId
     return eid && !localByCanonicalId[eid] && !deletedSet.has(eid)
@@ -436,8 +535,23 @@ export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry
     const content = await downloadFile(f.id)
     const parsed = markdownToEntry(content)
     if (parsed) {
-      await onNewEntry(parsed)
+      const newLocalId = await onNewEntry(parsed)
       downloaded++
+
+      const driveAtts = Object.values(driveAttsByEntryId[parsed.id] || {})
+      for (const driveAtt of driveAtts) {
+        try {
+          const dataUrl = await downloadAttachmentAsDataUrl(driveAtt.id)
+          await onSaveAttachment?.(newLocalId, {
+            name: driveAtt.appProperties.attachmentName,
+            type: driveAtt.mimeType,
+            data: dataUrl,
+            size: 0,
+          })
+        } catch (e) {
+          console.error('Failed to download attachment:', driveAtt.name, e)
+        }
+      }
     }
     onProgress?.(`Downloading… ${downloaded}/${driveOnlyFiles.length}`)
   }

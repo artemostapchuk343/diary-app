@@ -102,7 +102,7 @@ export default function EntryEditor() {
 
       if (isSignedIn() && savedMeta) {
         setSaveStatus('uploading')
-        const entry = { ...savedMeta, title, body, mood, updatedAt: now }
+        const entry = { ...savedMeta, title, body, mood, updatedAt: now, attachments }
         const result = await uploadSingleEntry(entry)
         if (result.status === 'previously_deleted') {
           setDeletedPromptEntry(entry)
@@ -148,6 +148,7 @@ export default function EntryEditor() {
   async function removeAttachment(att) {
     if (att.id) await db.attachments.delete(att.id)
     setAttachments(prev => prev.filter(a => a !== att))
+    setDirty(true)
   }
 
   function handleFiles(files) {
@@ -160,6 +161,7 @@ export default function EntryEditor() {
           size: file.size,
           data: e.target.result,
         }])
+        setDirty(true)
       }
       reader.readAsDataURL(file)
     })
