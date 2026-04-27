@@ -58,6 +58,7 @@ export default function EntryEditor() {
   const [mood, setMood] = useState('')
   const [attachments, setAttachments] = useState([])
   const [saveStatus, setSaveStatus] = useState('idle')
+  const [dirty, setDirty] = useState(isNew)
   const [entryMeta, setEntryMeta] = useState(null)
   const [deletedPromptEntry, setDeletedPromptEntry] = useState(null)
 
@@ -110,6 +111,7 @@ export default function EntryEditor() {
       }
 
       setSaveStatus('done')
+      setDirty(false)
       setTimeout(() => setSaveStatus('idle'), 2000)
     } catch (e) {
       console.error('Save failed:', e)
@@ -125,6 +127,7 @@ export default function EntryEditor() {
     try {
       await restoreAndUpload(deletedPromptEntry)
       setSaveStatus('done')
+      setDirty(false)
       setTimeout(() => setSaveStatus('idle'), 2000)
     } catch (e) {
       console.error('Restore failed:', e)
@@ -166,6 +169,7 @@ export default function EntryEditor() {
   }
 
   const busy = saveStatus === 'saving' || saveStatus === 'uploading'
+  const saveDisabled = busy || (!dirty && saveStatus !== 'done')
 
   return (
     <div className="min-h-screen bg-[#0f0f13] flex flex-col max-w-2xl mx-auto px-6 py-8">
@@ -192,8 +196,8 @@ export default function EntryEditor() {
           )}
           <button
             onClick={save}
-            disabled={busy}
-            className={`text-white text-base font-medium px-5 py-2 rounded-lg transition-colors disabled:opacity-70
+            disabled={saveDisabled}
+            className={`text-white text-base font-medium px-5 py-2 rounded-lg transition-colors disabled:opacity-40
               ${saveStatus === 'done' ? 'bg-green-600' : saveStatus === 'error' ? 'bg-red-600' : 'bg-indigo-600 hover:bg-indigo-500'}`}
           >
             {STATUS_LABEL[saveStatus]}
@@ -205,18 +209,18 @@ export default function EntryEditor() {
         type="text"
         placeholder="Title"
         value={title}
-        onChange={e => setTitle(e.target.value)}
+        onChange={e => { setTitle(e.target.value); setDirty(true) }}
         className="bg-transparent text-white text-3xl font-semibold placeholder-slate-600 outline-none border-none mb-4 w-full"
       />
 
       <div className="mb-5">
-        <MoodPicker value={mood} onChange={setMood} />
+        <MoodPicker value={mood} onChange={v => { setMood(v); setDirty(true) }} />
       </div>
 
       <textarea
         placeholder="Write your thoughts…"
         value={body}
-        onChange={e => setBody(e.target.value)}
+        onChange={e => { setBody(e.target.value); setDirty(true) }}
         className="flex-1 bg-transparent text-slate-200 placeholder-slate-600 outline-none border-none resize-none text-lg leading-relaxed min-h-72 w-full"
         autoFocus={isNew}
       />
