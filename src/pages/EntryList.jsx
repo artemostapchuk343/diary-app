@@ -116,7 +116,7 @@ export default function EntryList() {
       for (const file of pendingFiles) {
         const content = await file.text()
         const { title, body, mood } = parseImportedFile(file.name, content)
-        lastId = await db.entries.add({ title, body, mood, createdAt: isoDate, updatedAt: isoDate })
+        lastId = await db.entries.add({ sourceId: crypto.randomUUID(), title, body, mood, createdAt: isoDate, updatedAt: isoDate })
       }
       await loadEntries()
       if (pendingFiles.length === 1 && lastId) navigate(`/entry/${lastId}`)

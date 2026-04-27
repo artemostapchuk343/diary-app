@@ -85,11 +85,12 @@ export default function EntryEditor() {
 
     try {
       if (isNew) {
-        const newId = await db.entries.add({ title, body, mood, createdAt: now, updatedAt: now })
+        const sourceId = crypto.randomUUID()
+        const newId = await db.entries.add({ sourceId, title, body, mood, createdAt: now, updatedAt: now })
         for (const att of attachments) {
           if (!att.id) await db.attachments.add({ ...att, entryId: newId })
         }
-        savedMeta = { id: newId, sourceId: null, createdAt: now }
+        savedMeta = { id: newId, sourceId, createdAt: now }
         setEntryMeta(savedMeta)
         navigate(`/entry/${newId}`, { replace: true })
       } else {
