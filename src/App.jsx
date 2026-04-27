@@ -4,8 +4,6 @@ import { useAuth } from './useAuth'
 import LockScreen from './pages/LockScreen'
 import EntryList from './pages/EntryList'
 import EntryEditor from './pages/EntryEditor'
-import NatureBackground from './components/NatureBackground'
-
 function Guard({ children }) {
   const unlocked = useAuth(s => s.unlocked)
   const initializing = useAuth(s => s.initializing)
@@ -27,7 +25,6 @@ function Guard({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <NatureBackground />
       <Guard>
         <Routes>
           <Route path="/" element={<EntryList />} />

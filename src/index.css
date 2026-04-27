@@ -7,7 +7,11 @@
 body {
   margin: 0;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  background: #1a2e1e;
+  background:
+    radial-gradient(ellipse 85% 65% at 0% 100%, #1f4a2a 0%, transparent 55%),
+    radial-gradient(ellipse 65% 55% at 100% 0%, #1a3d24 0%, transparent 52%),
+    radial-gradient(ellipse 40% 35% at 50% 50%, #0f1f13 0%, transparent 70%),
+    #0b1410;
   color: #e2e8f0;
   -webkit-font-smoothing: antialiased;
 }
