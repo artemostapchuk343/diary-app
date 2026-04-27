@@ -14,10 +14,16 @@ export default function SyncPanel() {
       setConnected(ok)
       if (ok) trigger()
     })
+    function onConnected() {
+      setConnected(true)
+      trigger()
+    }
+    window.addEventListener('gdrive-connected', onConnected)
+    return () => window.removeEventListener('gdrive-connected', onConnected)
   }, [])
 
   function handleConnect() {
-    signIn() // redirects the page to Google — no popup
+    signIn()
   }
 
   function handleDisconnect() {

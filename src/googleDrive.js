@@ -1,105 +1,129 @@
 const FOLDER_NAME = 'My Diary'
 const SCOPE = 'https://www.googleapis.com/auth/drive.file'
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
+const CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET
 const REDIRECT_URI = window.location.origin
 const CONNECTED_KEY = 'gdrive_was_connected'
+const REFRESH_TOKEN_KEY = 'gdrive_refresh_token'
+const VERIFIER_KEY = 'gdrive_pkce_verifier'
 
 let accessToken = null
-let tokenClient = null
 let refreshTimer = null
 
-// Parse token immediately on module load — before any React component mounts
-;(function parseRedirectToken() {
-  const hash = window.location.hash.slice(1)
-  if (!hash) return
-  const params = new URLSearchParams(hash)
-  const token = params.get('access_token')
-  const expiresIn = params.get('expires_in')
-  if (!token) return
-  accessToken = token
-  localStorage.setItem(CONNECTED_KEY, '1')
-  window.history.replaceState(null, '', window.location.pathname)
-  setTimeout(() => scheduleRefresh(Number(expiresIn)), 0)
-})()
+function randomBase64url(len) {
+  const arr = crypto.getRandomValues(new Uint8Array(len))
+  return btoa(String.fromCharCode(...arr)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
+
+async function sha256Base64url(str) {
+  const bytes = new TextEncoder().encode(str)
+  const hash = await crypto.subtle.digest('SHA-256', bytes)
+  return btoa(String.fromCharCode(...new Uint8Array(hash))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
 
 function scheduleRefresh(expiresIn) {
   clearTimeout(refreshTimer)
-  // Refresh 2 minutes before expiry
-  const delay = Math.max((expiresIn - 120) * 1000, 10000)
+  const delay = Math.max((expiresIn - 120) * 1000, 10_000)
   refreshTimer = setTimeout(() => silentSignIn(), delay)
 }
 
+async function exchangeCode(code) {
+  const verifier = sessionStorage.getItem(VERIFIER_KEY)
+  sessionStorage.removeItem(VERIFIER_KEY)
+  const resp = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      redirect_uri: REDIRECT_URI,
+      grant_type: 'authorization_code',
+      code_verifier: verifier || '',
+    }),
+  })
+  const data = await resp.json()
+  if (data.error) throw new Error(data.error_description || data.error)
+  accessToken = data.access_token
+  if (data.refresh_token) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token)
+  }
+  localStorage.setItem(CONNECTED_KEY, '1')
+  scheduleRefresh(data.expires_in)
+  window.history.replaceState(null, '', window.location.pathname)
+  window.dispatchEvent(new Event('gdrive-connected'))
+}
+
+// Parse auth code from URL on module load
+;(function parseRedirectCode() {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('code')
+  if (!code) return
+  exchangeCode(code).catch(err => {
+    console.error('Drive token exchange failed:', err)
+    window.history.replaceState(null, '', window.location.pathname)
+  })
+})()
+
 export function isConfigured() {
-  return !!CLIENT_ID
+  return !!CLIENT_ID && !!CLIENT_SECRET
 }
 
 export function isSignedIn() {
   return !!accessToken
 }
 
-function waitForGSI() {
-  return new Promise((resolve, reject) => {
-    if (window.google?.accounts?.oauth2) return resolve()
-    let elapsed = 0
-    const interval = setInterval(() => {
-      if (window.google?.accounts?.oauth2) { clearInterval(interval); resolve() }
-      elapsed += 100
-      if (elapsed > 10000) { clearInterval(interval); reject(new Error('Google sign-in script failed to load')) }
-    }, 100)
-  })
-}
-
-export function signIn() {
+export async function signIn() {
+  const verifier = randomBase64url(64)
+  const challenge = await sha256Base64url(verifier)
+  sessionStorage.setItem(VERIFIER_KEY, verifier)
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     redirect_uri: REDIRECT_URI,
-    response_type: 'token',
+    response_type: 'code',
     scope: SCOPE,
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+    access_type: 'offline',
     prompt: 'consent',
-    include_granted_scopes: 'true',
   })
   window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
 }
 
-// Called on app load — reads token from URL hash after redirect
-export function handleAuthCallback() {
-  const hash = window.location.hash.slice(1)
-  if (!hash) return false
-  const params = new URLSearchParams(hash)
-  const token = params.get('access_token')
-  const expiresIn = params.get('expires_in')
-  if (!token) return false
-  accessToken = token
-  localStorage.setItem(CONNECTED_KEY, '1')
-  scheduleRefresh(Number(expiresIn))
-  window.history.replaceState(null, '', window.location.pathname)
-  return true
-}
-
 export async function silentSignIn() {
-  if (accessToken) return true  // already have token from redirect
-  if (!localStorage.getItem(CONNECTED_KEY)) return false
-  await waitForGSI()
-  return new Promise(resolve => {
-    if (!window.google?.accounts?.oauth2) return resolve(false)
-    const tc = window.google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPE,
-      callback: response => {
-        if (response.error) return resolve(false)
-        accessToken = response.access_token
-        scheduleRefresh(response.expires_in)
-        resolve(true)
-      },
+  if (accessToken) return true
+  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
+  if (!refreshToken) return false
+  try {
+    const resp = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: 'refresh_token',
+      }),
     })
-    tc.requestAccessToken({ prompt: '' })
-  })
+    const data = await resp.json()
+    if (data.error) {
+      localStorage.removeItem(REFRESH_TOKEN_KEY)
+      localStorage.removeItem(CONNECTED_KEY)
+      return false
+    }
+    accessToken = data.access_token
+    scheduleRefresh(data.expires_in)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function signOut() {
   clearTimeout(refreshTimer)
   accessToken = null
   localStorage.removeItem(CONNECTED_KEY)
+  localStorage.removeItem(REFRESH_TOKEN_KEY)
 }
 
 async function api(path, options = {}) {
@@ -215,10 +239,8 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
   const driveFiles = await listDriveEntries(folderId)
 
   const driveByEntryId = {}
-  const driveByDriveId = {}
   driveFiles.forEach(f => {
     if (f.appProperties?.entryId) driveByEntryId[f.appProperties.entryId] = f
-    driveByDriveId[f.id] = f
   })
 
   const localById = {}
@@ -226,11 +248,9 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
 
   let uploaded = 0, downloaded = 0
 
-  // Upload local → Drive
   for (const entry of localEntries) {
     const driveFile = driveByEntryId[String(entry.id)]
     const content = entryToMarkdown(entry)
-
     if (driveFile) {
       const driveTime = new Date(driveFile.modifiedTime).getTime()
       const localTime = new Date(entry.updatedAt).getTime()
@@ -245,7 +265,6 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
     onProgress?.(`Uploading… ${uploaded}/${localEntries.length}`)
   }
 
-  // Download Drive → local (entries not in local DB)
   const driveOnlyFiles = driveFiles.filter(f => {
     const eid = f.appProperties?.entryId
     return eid && !localById[eid]
