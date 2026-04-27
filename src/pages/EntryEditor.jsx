@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Trash2, Paperclip, X, Image } from 'lucide-react'
+import { ArrowLeft, Trash2, Paperclip, X, Image, Languages } from 'lucide-react'
 import { db } from '../db'
 import { format } from 'date-fns'
 import MoodPicker from '../components/MoodPicker'
@@ -14,6 +14,41 @@ const STATUS_LABEL = {
   error: 'Save',
 }
 
+const LANGS = [
+  { code: 'en', label: 'EN' },
+  { code: 'uk', label: 'UA' },
+  { code: 'pl', label: 'PL' },
+]
+
+async function translateText(text, targetLang) {
+  if (!text.trim()) return text
+
+  // Split into chunks on paragraph boundaries, max 4000 chars each
+  const lines = text.split('\n')
+  const chunks = []
+  let chunk = ''
+  for (const line of lines) {
+    const next = chunk ? chunk + '\n' + line : line
+    if (next.length > 4000 && chunk) {
+      chunks.push(chunk)
+      chunk = line
+    } else {
+      chunk = next
+    }
+  }
+  if (chunk) chunks.push(chunk)
+
+  const results = []
+  for (const c of chunks) {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(c)}`
+    const resp = await fetch(url)
+    if (!resp.ok) throw new Error(`Translation failed: ${resp.status}`)
+    const data = await resp.json()
+    results.push(data[0].map(s => s[0]).join(''))
+  }
+  return results.join('\n')
+}
+
 function DeletedPromptModal({ onRestore, onKeepLocal, onCancel }) {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
@@ -23,22 +58,13 @@ function DeletedPromptModal({ onRestore, onKeepLocal, onCancel }) {
           This note was deleted from Drive on another device. Do you want to upload it again as a new note, or keep it only on this device?
         </p>
         <div className="flex flex-col gap-2">
-          <button
-            onClick={onRestore}
-            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-base font-medium rounded-xl py-3 transition-colors"
-          >
+          <button onClick={onRestore} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-base font-medium rounded-xl py-3 transition-colors">
             Upload as new note
           </button>
-          <button
-            onClick={onKeepLocal}
-            className="w-full bg-white/5 hover:bg-white/10 text-slate-300 text-base font-medium rounded-xl py-3 transition-colors"
-          >
+          <button onClick={onKeepLocal} className="w-full bg-white/5 hover:bg-white/10 text-slate-300 text-base font-medium rounded-xl py-3 transition-colors">
             Keep on this device only
           </button>
-          <button
-            onClick={onCancel}
-            className="w-full text-slate-500 hover:text-slate-300 text-sm py-2 transition-colors"
-          >
+          <button onClick={onCancel} className="w-full text-slate-500 hover:text-slate-300 text-sm py-2 transition-colors">
             Cancel
           </button>
         </div>
@@ -51,6 +77,7 @@ export default function EntryEditor() {
   const { id } = useParams()
   const isNew = id === 'new'
   const navigate = useNavigate()
+  const photoRef = useRef()
   const fileRef = useRef()
 
   const [title, setTitle] = useState('')
@@ -61,6 +88,8 @@ export default function EntryEditor() {
   const [dirty, setDirty] = useState(isNew)
   const [entryMeta, setEntryMeta] = useState(null)
   const [deletedPromptEntry, setDeletedPromptEntry] = useState(null)
+  const [translating, setTranslating] = useState(false)
+  const [translateError, setTranslateError] = useState('')
 
   useEffect(() => {
     if (!isNew) loadEntry()
@@ -145,6 +174,27 @@ export default function EntryEditor() {
     navigate('/')
   }
 
+  async function handleTranslate(langCode) {
+    if (translating || (!title && !body)) return
+    setTranslating(true)
+    setTranslateError('')
+    try {
+      const [newTitle, newBody] = await Promise.all([
+        title ? translateText(title, langCode) : Promise.resolve(title),
+        body ? translateText(body, langCode) : Promise.resolve(body),
+      ])
+      setTitle(newTitle)
+      setBody(newBody)
+      setDirty(true)
+    } catch (e) {
+      console.error('Translation failed:', e)
+      setTranslateError('Translation failed. Try again.')
+      setTimeout(() => setTranslateError(''), 3000)
+    } finally {
+      setTranslating(false)
+    }
+  }
+
   async function removeAttachment(att) {
     if (att.id) await db.attachments.delete(att.id)
     setAttachments(prev => prev.filter(a => a !== att))
@@ -172,7 +222,7 @@ export default function EntryEditor() {
   }
 
   const busy = saveStatus === 'saving' || saveStatus === 'uploading'
-  const saveDisabled = busy || (!dirty && saveStatus !== 'done')
+  const saveDisabled = busy || translating || (!dirty && saveStatus !== 'done')
 
   return (
     <div className="min-h-screen bg-[#0f0f13] flex flex-col max-w-2xl mx-auto px-6 py-8">
@@ -216,8 +266,25 @@ export default function EntryEditor() {
         className="bg-transparent text-white text-3xl font-semibold placeholder-slate-600 outline-none border-none mb-4 w-full"
       />
 
-      <div className="mb-5">
+      <div className="mb-5 flex items-center gap-3 flex-wrap">
         <MoodPicker value={mood} onChange={v => { setMood(v); setDirty(true) }} />
+        <div className="flex items-center gap-1.5 ml-auto">
+          <Languages size={15} className="text-slate-500" />
+          {LANGS.map(({ code, label }) => (
+            <button
+              key={code}
+              onClick={() => handleTranslate(code)}
+              disabled={translating}
+              title={`Translate to ${label}`}
+              className="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-indigo-600/30 hover:text-indigo-300 text-slate-400 transition-colors disabled:opacity-40"
+            >
+              {translating ? '…' : label}
+            </button>
+          ))}
+        </div>
+        {translateError && (
+          <p className="w-full text-red-400 text-xs mt-1">{translateError}</p>
+        )}
       </div>
 
       <textarea
@@ -253,22 +320,29 @@ export default function EntryEditor() {
 
       <div className="mt-5 pt-5 border-t border-white/10 flex items-center gap-5">
         <input
+          ref={photoRef}
+          type="file"
+          multiple
+          accept="image/*,video/*"
+          className="hidden"
+          onChange={e => handleFiles(e.target.files)}
+        />
+        <input
           ref={fileRef}
           type="file"
           multiple
-          accept="image/*,video/*,.pdf,.doc,.docx,.txt,.md"
           className="hidden"
           onChange={e => handleFiles(e.target.files)}
         />
         <button
-          onClick={() => fileRef.current.click()}
+          onClick={() => photoRef.current.click()}
           className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-base transition-colors"
         >
           <Image size={20} />
           <span>Photo</span>
         </button>
         <button
-          onClick={() => { fileRef.current.removeAttribute('accept'); fileRef.current.click() }}
+          onClick={() => fileRef.current.click()}
           className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-base transition-colors"
         >
           <Paperclip size={20} />
