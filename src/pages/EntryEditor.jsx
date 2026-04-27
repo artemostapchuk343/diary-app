@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Trash2, Paperclip, X, Image, UploadCloud } from 'lucide-react'
+import { ArrowLeft, Trash2, Paperclip, X, Image } from 'lucide-react'
 import { db } from '../db'
 import { format } from 'date-fns'
 import MoodPicker from '../components/MoodPicker'
 import { useSync } from '../useSync'
-import { isSignedIn, markEntryDeleted, uploadSingleEntry } from '../googleDrive'
+import { isSignedIn, markEntryDeleted } from '../googleDrive'
 
 export default function EntryEditor() {
   const { id } = useParams()
@@ -18,7 +18,6 @@ export default function EntryEditor() {
   const [mood, setMood] = useState('')
   const [attachments, setAttachments] = useState([])
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
   // Stable cross-device metadata for this entry
   const [entryMeta, setEntryMeta] = useState(null)
   const triggerSync = useSync(s => s.trigger)
@@ -56,22 +55,6 @@ export default function EntryEditor() {
     }
     setSaving(false)
     triggerSync(true)
-  }
-
-  async function handleUpload() {
-    if (!isSignedIn() || !entryMeta) return
-    setUploading(true)
-    try {
-      const now = new Date().toISOString()
-      if (!isNew) {
-        await db.entries.update(Number(id), { title, body, mood, updatedAt: now })
-      }
-      await uploadSingleEntry({ ...entryMeta, title, body, mood, updatedAt: now })
-    } catch (e) {
-      console.error('Upload failed:', e)
-    } finally {
-      setUploading(false)
-    }
   }
 
   async function deleteEntry() {
@@ -119,16 +102,6 @@ export default function EntryEditor() {
           {!isNew && (
             <button onClick={deleteEntry} className="text-slate-500 hover:text-red-400 transition-colors">
               <Trash2 size={22} />
-            </button>
-          )}
-          {isSignedIn() && (
-            <button
-              onClick={handleUpload}
-              disabled={uploading || isNew}
-              title="Upload to Drive"
-              className="text-slate-500 hover:text-indigo-400 disabled:opacity-30 transition-colors"
-            >
-              <UploadCloud size={22} className={uploading ? 'animate-pulse' : ''} />
             </button>
           )}
           <button

@@ -1,15 +1,48 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Lock, BookOpen } from 'lucide-react'
+import { Plus, Search, Lock, BookOpen, FileUp } from 'lucide-react'
 import { db } from '../db'
 import { format } from 'date-fns'
 import { useAuth } from '../useAuth'
 import SyncPanel from '../components/SyncPanel'
 import { useSync } from '../useSync'
+import { markdownToEntry } from '../googleDrive'
+
+function parseImportedFile(filename, content) {
+  const ext = filename.split('.').pop().toLowerCase()
+  const nameWithoutExt = filename.replace(/\.[^.]+$/, '')
+
+  // Try markdown frontmatter first
+  if (ext === 'md' || ext === 'markdown') {
+    const parsed = markdownToEntry(content)
+    if (parsed) {
+      return {
+        title: parsed.title || nameWithoutExt,
+        body: parsed.body || '',
+        mood: parsed.mood || '',
+      }
+    }
+  }
+
+  // Plain text / rtf / anything else — use filename as title, content as body
+  // Strip RTF control words if needed
+  let body = content
+  if (ext === 'rtf') {
+    body = content
+      .replace(/\{\\[^}]*\}/g, '')   // remove RTF groups
+      .replace(/\\[a-z]+\d* ?/g, '')  // remove control words
+      .replace(/[{}\\]/g, '')          // remove remaining braces/backslashes
+      .trim()
+  }
+
+  return { title: nameWithoutExt, body, mood: '' }
+}
 
 export default function EntryList() {
   const [entries, setEntries] = useState([])
   const [query, setQuery] = useState('')
+  const [importing, setImporting] = useState(false)
+  const importRef = useRef()
   const navigate = useNavigate()
   const lock = useAuth(s => s.lock)
   const triggerSync = useSync(s => s.trigger)
@@ -22,6 +55,29 @@ export default function EntryList() {
   async function loadEntries() {
     const all = await db.entries.orderBy('createdAt').reverse().toArray()
     setEntries(all)
+  }
+
+  async function handleImport(e) {
+    const files = Array.from(e.target.files)
+    if (!files.length) return
+    setImporting(true)
+    try {
+      const now = new Date().toISOString()
+      let lastId = null
+      for (const file of files) {
+        const content = await file.text()
+        const { title, body, mood } = parseImportedFile(file.name, content)
+        lastId = await db.entries.add({ title, body, mood, createdAt: now, updatedAt: now })
+      }
+      await loadEntries()
+      // Navigate to the imported entry if only one file
+      if (files.length === 1 && lastId) navigate(`/entry/${lastId}`)
+    } catch (err) {
+      console.error('Import failed:', err)
+    } finally {
+      setImporting(false)
+      e.target.value = ''
+    }
   }
 
   const filtered = query.trim()
@@ -38,9 +94,27 @@ export default function EntryList() {
           <BookOpen size={28} className="text-indigo-400" />
           <h1 className="text-2xl font-semibold text-white">My Diary</h1>
         </div>
-        <button onClick={lock} className="text-slate-500 hover:text-slate-300 transition-colors">
-          <Lock size={22} />
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => importRef.current.click()}
+            disabled={importing}
+            title="Import from file"
+            className="text-slate-500 hover:text-slate-300 disabled:opacity-50 transition-colors"
+          >
+            <FileUp size={22} />
+          </button>
+          <button onClick={lock} className="text-slate-500 hover:text-slate-300 transition-colors">
+            <Lock size={22} />
+          </button>
+        </div>
+        <input
+          ref={importRef}
+          type="file"
+          multiple
+          accept=".txt,.md,.markdown,.rtf,.text"
+          className="hidden"
+          onChange={handleImport}
+        />
       </div>
 
       <SyncPanel />
