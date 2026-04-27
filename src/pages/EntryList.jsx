@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Lock, BookOpen, FileUp } from 'lucide-react'
+import { Plus, Search, Lock, BookOpen, FileUp, Calendar } from 'lucide-react'
 import { db } from '../db'
 import { format } from 'date-fns'
 import { useAuth } from '../useAuth'
@@ -12,7 +12,6 @@ function parseImportedFile(filename, content) {
   const ext = filename.split('.').pop().toLowerCase()
   const nameWithoutExt = filename.replace(/\.[^.]+$/, '')
 
-  // Try markdown frontmatter first
   if (ext === 'md' || ext === 'markdown') {
     const parsed = markdownToEntry(content)
     if (parsed) {
@@ -24,24 +23,63 @@ function parseImportedFile(filename, content) {
     }
   }
 
-  // Plain text / rtf / anything else — use filename as title, content as body
-  // Strip RTF control words if needed
   let body = content
   if (ext === 'rtf') {
     body = content
-      .replace(/\{\\[^}]*\}/g, '')   // remove RTF groups
-      .replace(/\\[a-z]+\d* ?/g, '')  // remove control words
-      .replace(/[{}\\]/g, '')          // remove remaining braces/backslashes
+      .replace(/\{\\[^}]*\}/g, '')
+      .replace(/\\[a-z]+\d* ?/g, '')
+      .replace(/[{}\\]/g, '')
       .trim()
   }
 
   return { title: nameWithoutExt, body, mood: '' }
 }
 
+function ImportModal({ files, onConfirm, onCancel }) {
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
+      <div className="bg-[#1a1a22] border border-white/10 rounded-2xl p-6 w-full max-w-sm">
+        <h2 className="text-white text-lg font-semibold mb-1">Import {files.length > 1 ? `${files.length} files` : `"${files[0]?.name}"`}</h2>
+        <p className="text-slate-400 text-sm mb-5">Choose the date for {files.length > 1 ? 'these entries' : 'this entry'}.</p>
+
+        <label className="block text-slate-400 text-sm mb-2">Entry date</label>
+        <div className="relative mb-6">
+          <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+          <input
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            max={new Date().toISOString().slice(0, 10)}
+            className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-3 text-white text-base outline-none focus:border-indigo-500 [color-scheme:dark]"
+          />
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 text-base font-medium rounded-xl py-3 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm(date)}
+            className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-base font-medium rounded-xl py-3 transition-colors"
+          >
+            Import
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function EntryList() {
   const [entries, setEntries] = useState([])
   const [query, setQuery] = useState('')
   const [importing, setImporting] = useState(false)
+  const [pendingFiles, setPendingFiles] = useState(null)
   const importRef = useRef()
   const navigate = useNavigate()
   const lock = useAuth(s => s.lock)
@@ -57,26 +95,31 @@ export default function EntryList() {
     setEntries(all)
   }
 
-  async function handleImport(e) {
+  function handleFileSelect(e) {
     const files = Array.from(e.target.files)
     if (!files.length) return
+    setPendingFiles(files)
+    e.target.value = ''
+  }
+
+  async function confirmImport(dateStr) {
+    setPendingFiles(null)
     setImporting(true)
+    // Use noon local time to avoid date shifting across timezones
+    const isoDate = new Date(`${dateStr}T12:00:00`).toISOString()
     try {
-      const now = new Date().toISOString()
       let lastId = null
-      for (const file of files) {
+      for (const file of pendingFiles) {
         const content = await file.text()
         const { title, body, mood } = parseImportedFile(file.name, content)
-        lastId = await db.entries.add({ title, body, mood, createdAt: now, updatedAt: now })
+        lastId = await db.entries.add({ title, body, mood, createdAt: isoDate, updatedAt: isoDate })
       }
       await loadEntries()
-      // Navigate to the imported entry if only one file
-      if (files.length === 1 && lastId) navigate(`/entry/${lastId}`)
+      if (pendingFiles.length === 1 && lastId) navigate(`/entry/${lastId}`)
     } catch (err) {
       console.error('Import failed:', err)
     } finally {
       setImporting(false)
-      e.target.value = ''
     }
   }
 
@@ -89,6 +132,14 @@ export default function EntryList() {
 
   return (
     <div className="min-h-screen bg-[#0f0f13] flex flex-col max-w-2xl mx-auto px-6 py-8">
+      {pendingFiles && (
+        <ImportModal
+          files={pendingFiles}
+          onConfirm={confirmImport}
+          onCancel={() => setPendingFiles(null)}
+        />
+      )}
+
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
           <BookOpen size={28} className="text-indigo-400" />
@@ -113,7 +164,7 @@ export default function EntryList() {
           multiple
           accept=".txt,.md,.markdown,.rtf,.text"
           className="hidden"
-          onChange={handleImport}
+          onChange={handleFileSelect}
         />
       </div>
 
