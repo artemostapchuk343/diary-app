@@ -11,6 +11,7 @@ export default function LockScreen() {
   const [error, setError] = useState('')
   const [isNew] = useState(!hasPassword())
   const unlock = useAuth(s => s.unlock)
+  const restoreFromDrive = useAuth(s => s.restoreFromDrive)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -27,6 +28,9 @@ export default function LockScreen() {
     } else {
       const ok = await verifyPassword(password)
       if (!ok) return setError('Wrong password.')
+      import('../googleDrive').then(({ isSignedIn, uploadPasswordConfig }) => {
+        if (isSignedIn()) uploadPasswordConfig(getPasswordConfig())
+      }).catch(() => {})
       unlock()
     }
   }
@@ -100,6 +104,17 @@ export default function LockScreen() {
             {isNew ? 'Create Password' : 'Unlock'}
           </button>
         </form>
+
+        {isConfigured() && (
+          <button
+            type="button"
+            onClick={restoreFromDrive}
+            className="mt-5 w-full flex items-center justify-center gap-2 text-slate-500 hover:text-slate-300 text-sm transition-colors py-2"
+          >
+            <Cloud size={16} />
+            Restore password from Google Drive
+          </button>
+        )}
       </div>
     </div>
   )

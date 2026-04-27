@@ -39,4 +39,27 @@ export const useAuth = create((set) => ({
     }
     set({ initializing: false })
   },
+
+  restoreFromDrive: async () => {
+    localStorage.removeItem('diary_verify')
+    localStorage.removeItem('diary_salt')
+    localStorage.removeItem('diary_unlocked_date')
+    set({ initializing: true, unlocked: false })
+    try {
+      const { silentSignIn, downloadPasswordConfig, signIn } = await import('./googleDrive')
+      const ok = await silentSignIn()
+      if (ok) {
+        const config = await downloadPasswordConfig()
+        if (config?.salt && config?.verify) {
+          loadPasswordConfig(config)
+        }
+      } else {
+        signIn()
+        return
+      }
+    } catch (e) {
+      console.error('Restore failed:', e)
+    }
+    set({ initializing: false })
+  },
 }))
