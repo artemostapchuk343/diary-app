@@ -36,7 +36,7 @@ export default function LockScreen() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0f0f13]">
+    <div className="min-h-screen flex items-center justify-center relative" style={{ zIndex: 1 }}>
       <div className="w-full max-w-md px-8">
         <div className="flex flex-col items-center mb-10">
           <div className="w-20 h-20 rounded-2xl bg-indigo-600 flex items-center justify-center mb-5">

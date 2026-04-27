@@ -406,7 +406,7 @@ export default function EntryEditor() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f0f13] flex flex-col max-w-2xl mx-auto px-6 py-8">
+    <div className="min-h-screen flex flex-col max-w-2xl mx-auto px-6 py-8 relative" style={{ zIndex: 1 }}>
       {deletedPromptEntry && (
         <DeletedPromptModal
           onRestore={handleRestore}
