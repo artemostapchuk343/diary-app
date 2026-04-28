@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { isSignedIn, sync, downloadProfilePic } from './googleDrive'
+import { isSignedIn, silentSignIn, sync, downloadProfilePic } from './googleDrive'
 import { db } from './db'
 
 const MIN_INTERVAL_MS = 30_000
@@ -14,7 +14,10 @@ export const useSync = create((set, get) => ({
   trigger: async (force = false) => {
     const { syncing, lastSync } = get()
     if (syncing) return
-    if (!isSignedIn()) return
+    if (!isSignedIn()) {
+      const refreshed = await silentSignIn()
+      if (!refreshed) return
+    }
     if (!force && lastSync && Date.now() - lastSync < MIN_INTERVAL_MS) return
 
     set({ syncing: true, error: '', result: null, progress: 'Syncing…' })

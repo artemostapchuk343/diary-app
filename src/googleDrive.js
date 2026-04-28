@@ -152,16 +152,35 @@ async function api(path, options = {}) {
     ...options,
     headers: { Authorization: `Bearer ${accessToken}`, ...options.headers },
   })
-  if (resp.status === 401) { accessToken = null; throw new Error('TOKEN_EXPIRED') }
+  if (resp.status === 401) {
+    accessToken = null
+    const refreshed = await silentSignIn()
+    if (!refreshed) throw new Error('TOKEN_EXPIRED')
+    const retry = await fetch(`https://www.googleapis.com/drive/v3${path}`, {
+      ...options,
+      headers: { Authorization: `Bearer ${accessToken}`, ...options.headers },
+    })
+    if (retry.status === 401) { accessToken = null; throw new Error('TOKEN_EXPIRED') }
+    return retry
+  }
   return resp
 }
 
 async function uploadApi(path, options = {}) {
-  const resp = await fetch(`https://www.googleapis.com/upload/drive/v3${path}`, {
+  let resp = await fetch(`https://www.googleapis.com/upload/drive/v3${path}`, {
     ...options,
     headers: { Authorization: `Bearer ${accessToken}`, ...options.headers },
   })
-  if (resp.status === 401) { accessToken = null; throw new Error('TOKEN_EXPIRED') }
+  if (resp.status === 401) {
+    accessToken = null
+    const refreshed = await silentSignIn()
+    if (!refreshed) throw new Error('TOKEN_EXPIRED')
+    resp = await fetch(`https://www.googleapis.com/upload/drive/v3${path}`, {
+      ...options,
+      headers: { Authorization: `Bearer ${accessToken}`, ...options.headers },
+    })
+    if (resp.status === 401) { accessToken = null; throw new Error('TOKEN_EXPIRED') }
+  }
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}))
     throw new Error(err?.error?.message || `Upload failed: ${resp.status}`)
