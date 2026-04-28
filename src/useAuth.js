@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { hasPassword, loadPasswordConfig } from './crypto'
 
 const TODAY_KEY = 'diary_unlocked_date'
+const HIDDEN_AT_KEY = 'diary_hidden_at'
+const AUTO_LOCK_MS = 15 * 60 * 1000
 
 function isUnlockedToday() {
   return localStorage.getItem(TODAY_KEY) === new Date().toDateString()
@@ -44,6 +46,16 @@ export const useAuth = create((set) => ({
     set({ initializing: false })
   },
 
+  checkAutoLock: () => {
+    const hiddenAt = sessionStorage.getItem(HIDDEN_AT_KEY)
+    if (!hiddenAt) return
+    sessionStorage.removeItem(HIDDEN_AT_KEY)
+    if (Date.now() - Number(hiddenAt) > AUTO_LOCK_MS) {
+      localStorage.removeItem(TODAY_KEY)
+      set({ unlocked: false })
+    }
+  },
+
   restoreFromDrive: async () => {
     localStorage.removeItem('diary_verify')
     localStorage.removeItem('diary_salt')
@@ -67,3 +79,11 @@ export const useAuth = create((set) => ({
     set({ initializing: false })
   },
 }))
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    sessionStorage.setItem(HIDDEN_AT_KEY, String(Date.now()))
+  } else if (document.visibilityState === 'visible') {
+    useAuth.getState().checkAutoLock()
+  }
+})

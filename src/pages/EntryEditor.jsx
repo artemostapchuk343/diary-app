@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Trash2, Paperclip, X, Image, Languages } from 'lucide-react'
+import { ArrowLeft, Trash2, Paperclip, X, Image, Languages, Mic } from 'lucide-react'
 import MediaLightbox from '../components/MediaLightbox'
+import AudioRecorder from '../components/AudioRecorder'
 import { db } from '../db'
 import { format } from 'date-fns'
 import MoodPicker from '../components/MoodPicker'
@@ -19,6 +20,7 @@ const LANGS = [
   { code: 'en', label: 'EN', name: 'English' },
   { code: 'uk', label: 'UA', name: 'Ukrainian' },
   { code: 'pl', label: 'PL', name: 'Polish' },
+  { code: 'ru', label: 'RU', name: 'Russian' },
 ]
 
 async function translateText(text, targetLang) {
@@ -45,7 +47,7 @@ async function translateText(text, targetLang) {
 
 function DeleteModal({ activeLang, savedLangs, onDeleteAll, onDeleteTranslation, onPromotePrimary, onCancel }) {
   const [choosingPrimary, setChoosingPrimary] = useState(false)
-  const langName = { en: 'English', uk: 'Ukrainian', pl: 'Polish' }
+  const langName = { en: 'English', uk: 'Ukrainian', pl: 'Polish', ru: 'Russian' }
 
   if (choosingPrimary) {
     return (
@@ -149,6 +151,7 @@ export default function EntryEditor() {
   const [lightboxIndex, setLightboxIndex] = useState(null)
   const [editing, setEditing] = useState(isNew)
   const [detectedLang, setDetectedLang] = useState(null)
+  const [showRecorder, setShowRecorder] = useState(false)
 
   useEffect(() => {
     if (!isNew) loadEntry()
@@ -414,6 +417,13 @@ export default function EntryEditor() {
           onCancel={() => setDeletedPromptEntry(null)}
         />
       )}
+      {showRecorder && (
+        <AudioRecorder
+          onInsertText={text => { setBody(prev => prev ? prev + '\n\n' + text : text); setDirty(true) }}
+          onSaveAudio={att => { setAttachments(prev => [...prev, att]); setDirty(true) }}
+          onClose={() => setShowRecorder(false)}
+        />
+      )}
       {showDeleteModal && (
         <DeleteModal
           activeLang={activeLang}
@@ -544,7 +554,7 @@ export default function EntryEditor() {
                 const mediaList = attachments.filter(a => a.type?.startsWith('image/') || a.type?.startsWith('video/'))
                 const mediaIdx = mediaList.indexOf(att)
                 return (
-                  <div key={i} className="relative bg-white/5 border border-white/10 rounded-xl overflow-hidden group">
+                  <div key={i} className={`relative bg-white/5 border border-white/10 rounded-xl overflow-hidden group${att.type?.startsWith('audio/') ? ' col-span-2' : ''}`}>
                     {att.type?.startsWith('image/') ? (
                       <img
                         src={att.data}
@@ -563,6 +573,11 @@ export default function EntryEditor() {
                             <div className="w-0 h-0 border-t-[8px] border-b-[8px] border-l-[14px] border-t-transparent border-b-transparent border-l-white ml-1" />
                           </div>
                         </div>
+                      </div>
+                    ) : att.type?.startsWith('audio/') ? (
+                      <div className="flex items-center gap-3 px-4 py-3">
+                        <Mic size={16} className="text-indigo-400 shrink-0" />
+                        <audio src={att.data} controls className="flex-1 h-9 min-w-0" />
                       </div>
                     ) : (
                       <div className="flex items-center gap-3 p-4">
@@ -596,6 +611,10 @@ export default function EntryEditor() {
               <button onClick={() => fileRef.current.click()} className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-base transition-colors">
                 <Paperclip size={20} />
                 <span>File</span>
+              </button>
+              <button onClick={() => setShowRecorder(true)} className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-base transition-colors">
+                <Mic size={20} />
+                <span>Voice</span>
               </button>
             </div>
           )}
