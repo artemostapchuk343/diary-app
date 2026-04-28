@@ -414,7 +414,8 @@ export default function EntryEditor() {
     const isCurrent = detectedLang === code
     const isSaved = !!entryData?.translations?.[code]
     if (isActive) return 'bg-indigo-600 text-white'
-    if (isCurrent && !activeLang) return 'bg-white/5 text-slate-500 border border-white/10 opacity-50 cursor-default'
+    if (isCurrent && !activeLang) return 'bg-sky-600/20 text-sky-300 border border-sky-500/30 cursor-default'
+    if (isCurrent) return 'bg-sky-600/20 text-sky-300 border border-sky-500/30 hover:bg-sky-600/30'
     if (isSaved) return 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/40'
     return 'bg-white/5 text-slate-500 hover:text-slate-300 hover:bg-white/10'
   }
