@@ -444,14 +444,14 @@ export default function EntryEditor() {
               <>
                 <button
                   onClick={cancelEdit}
-                  className="text-slate-400 hover:text-white text-base font-medium px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                  className="text-slate-400 hover:text-white text-sm sm:text-base font-medium px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={save}
                   disabled={saveDisabled}
-                  className={`text-white text-base font-medium px-5 py-2 rounded-lg transition-colors disabled:opacity-40
+                  className={`text-white text-sm sm:text-base font-medium px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg transition-colors disabled:opacity-40
                     ${saveStatus === 'done' ? 'bg-green-600' : saveStatus === 'error' ? 'bg-red-600' : 'bg-indigo-600 hover:bg-indigo-500'}`}
                 >
                   {STATUS_LABEL[saveStatus]}
@@ -460,7 +460,7 @@ export default function EntryEditor() {
             ) : (
               <button
                 onClick={() => setEditing(true)}
-                className="text-white text-base font-medium px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors"
+                className="text-white text-sm sm:text-base font-medium px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition-colors"
               >
                 Edit
               </button>
@@ -477,11 +477,11 @@ export default function EntryEditor() {
               placeholder="Title"
               value={title}
               onChange={e => { setTitle(e.target.value); setDirty(true) }}
-              className="bg-transparent text-white text-3xl font-semibold placeholder-slate-600 outline-none border-none mb-4 w-full"
+              className="bg-transparent text-white text-2xl sm:text-3xl font-semibold placeholder-slate-600 outline-none border-none mb-4 w-full"
               autoFocus={isNew}
             />
           ) : (
-            <h1 className="text-white text-3xl font-semibold mb-4 leading-snug">
+            <h1 className="text-white text-2xl sm:text-3xl font-semibold mb-4 leading-snug">
               {title || <span className="text-slate-600">Untitled</span>}
             </h1>
           )}

@@ -55,8 +55,8 @@ export default function MoodPicker({ value, onChange }) {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-2 z-50 bg-[#1a1a2e] border border-white/10 rounded-2xl p-4 shadow-2xl w-80">
-          <div className="grid grid-cols-10 gap-1">
+        <div className="absolute top-full left-0 mt-2 z-50 bg-[#1a1a2e] border border-white/10 rounded-2xl p-4 shadow-2xl w-64 sm:w-80">
+          <div className="grid grid-cols-6 sm:grid-cols-10 gap-1">
             {MOODS.map(emoji => (
               <button
                 key={emoji}

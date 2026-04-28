@@ -271,6 +271,7 @@ export default function EntryList() {
     // migrate away from old 'calendar' value
     return (saved === 'calendar' || !saved) ? 'normal' : saved
   })
+  const [showCalendar, setShowCalendar] = useState(false)
   const importRef = useRef()
   const navigate = useNavigate()
   const lock = useAuth(s => s.lock)
@@ -346,6 +347,13 @@ export default function EntryList() {
             <h1 className="text-2xl font-semibold text-white">My Diary</h1>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowCalendar(s => !s)}
+              title="Calendar"
+              className={`lg:hidden p-1.5 rounded-lg transition-colors ${showCalendar ? 'bg-indigo-600/30 text-indigo-400' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}
+            >
+              <Calendar size={20} />
+            </button>
             <div className="flex items-center bg-white/5 rounded-lg p-1 gap-px mr-1">
               {VIEW_MODES.map(({ id, Icon, title }) => (
                 <button
@@ -365,9 +373,9 @@ export default function EntryList() {
         </div>
 
         {/* Two-column layout */}
-        <div className="flex gap-5 items-start">
+        <div className="flex flex-col lg:flex-row gap-5 items-start">
           {/* Left — entries */}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 w-full">
             <SyncPanel />
 
             <div className="flex items-center gap-3 mb-5">
@@ -408,6 +416,12 @@ export default function EntryList() {
               />
             </div>
 
+            {showCalendar && (
+              <div className="lg:hidden mb-5">
+                <CalendarSidebar entries={entries} attachedEntryIds={attachedEntryIds} navigate={navigate} />
+              </div>
+            )}
+
             {filtered.length === 0 && (
               <div className="flex flex-col items-center justify-center py-24 text-slate-500">
                 <NotebookPen size={48} className="mb-4 opacity-30" />
@@ -423,8 +437,8 @@ export default function EntryList() {
             </div>
           </div>
 
-          {/* Right — calendar sidebar */}
-          <div className="w-64 shrink-0 sticky top-8">
+          {/* Right — calendar sidebar (desktop only) */}
+          <div className="hidden lg:block w-64 shrink-0 sticky top-8">
             <CalendarSidebar
               entries={entries}
               attachedEntryIds={attachedEntryIds}
