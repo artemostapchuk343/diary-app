@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Lock, FileUp, Calendar, LayoutList, AlignJustify, Paperclip, ChevronLeft, ChevronRight, NotebookPen } from 'lucide-react'
+import { Plus, Search, Lock, FileUp, Calendar, LayoutList, AlignJustify, Paperclip, ChevronLeft, ChevronRight, NotebookPen, Image, Video, Mic } from 'lucide-react'
 import { db } from '../db'
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
@@ -83,7 +83,19 @@ function ImportModal({ files, onConfirm, onCancel }) {
   )
 }
 
-function NormalCard({ entry, hasAttachment, onClick }) {
+function AttachIcons({ types, size = 13 }) {
+  if (!types || types.size === 0) return null
+  return (
+    <>
+      {types.has('image') && <Image size={size} className="text-slate-500 shrink-0" />}
+      {types.has('video') && <Video size={size} className="text-slate-500 shrink-0" />}
+      {types.has('audio') && <Mic size={size} className="text-slate-500 shrink-0" />}
+      {types.has('file') && <Paperclip size={size} className="text-slate-500 shrink-0" />}
+    </>
+  )
+}
+
+function NormalCard({ entry, attTypes, onClick }) {
   return (
     <button
       onClick={onClick}
@@ -93,7 +105,7 @@ function NormalCard({ entry, hasAttachment, onClick }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5">
             <p className="text-white font-semibold text-base truncate">{entry.title || 'Untitled'}</p>
-            {hasAttachment && <Paperclip size={13} className="text-slate-500 shrink-0" />}
+            <AttachIcons types={attTypes} />
           </div>
           <p className="text-slate-400 text-sm line-clamp-2 leading-relaxed">{entry.body}</p>
         </div>
@@ -106,7 +118,7 @@ function NormalCard({ entry, hasAttachment, onClick }) {
   )
 }
 
-function CompactCard({ entry, hasAttachment, onClick }) {
+function CompactCard({ entry, attTypes, onClick }) {
   return (
     <button
       onClick={onClick}
@@ -117,13 +129,13 @@ function CompactCard({ entry, hasAttachment, onClick }) {
         : <span className="w-7 shrink-0" />
       }
       <span className="text-white text-sm font-medium truncate flex-1">{entry.title || 'Untitled'}</span>
-      {hasAttachment && <Paperclip size={13} className="text-slate-500 shrink-0" />}
+      <AttachIcons types={attTypes} />
       <span className="text-slate-500 text-xs whitespace-nowrap">{format(new Date(entry.createdAt), 'd MMM yyyy')}</span>
     </button>
   )
 }
 
-function CalendarSidebar({ entries, attachedEntryIds, navigate }) {
+function CalendarSidebar({ entries, attachedEntryIds, attachmentTypes, navigate }) {
   const [month, setMonth] = useState(new Date())
   const [selectedDay, setSelectedDay] = useState(format(new Date(), 'yyyy-MM-dd'))
 
@@ -235,7 +247,11 @@ function CalendarSidebar({ entries, attachedEntryIds, navigate }) {
                     <div className="flex items-center gap-2 mb-0.5">
                       {e.mood && <span className="text-base shrink-0">{e.mood}</span>}
                       <span className="text-white text-xs font-semibold truncate">{e.title || 'Untitled'}</span>
-                      {attachedEntryIds.has(e.id) && <Paperclip size={11} className="text-slate-500 shrink-0 ml-auto" />}
+                      {attachedEntryIds.has(e.id) && (
+                        <span className="ml-auto flex items-center gap-0.5">
+                          <AttachIcons types={attachmentTypes?.[e.id]} size={11} />
+                        </span>
+                      )}
                     </div>
                     {e.body && (
                       <p className="text-slate-500 text-xs leading-relaxed line-clamp-2">{e.body}</p>
@@ -263,6 +279,7 @@ const VIEW_MODES = [
 export default function EntryList() {
   const [entries, setEntries] = useState([])
   const [attachedEntryIds, setAttachedEntryIds] = useState(new Set())
+  const [attachmentTypes, setAttachmentTypes] = useState({})
   const [query, setQuery] = useState('')
   const [importing, setImporting] = useState(false)
   const [pendingFiles, setPendingFiles] = useState(null)
@@ -288,6 +305,15 @@ export default function EntryList() {
     ])
     setEntries(all)
     setAttachedEntryIds(new Set(atts.map(a => a.entryId)))
+    const types = {}
+    atts.forEach(a => {
+      if (!types[a.entryId]) types[a.entryId] = new Set()
+      if (a.type?.startsWith('image/')) types[a.entryId].add('image')
+      else if (a.type?.startsWith('video/')) types[a.entryId].add('video')
+      else if (a.type?.startsWith('audio/')) types[a.entryId].add('audio')
+      else types[a.entryId].add('file')
+    })
+    setAttachmentTypes(types)
   }
 
   function setView(mode) {
@@ -418,7 +444,7 @@ export default function EntryList() {
 
             {showCalendar && (
               <div className="lg:hidden mb-5">
-                <CalendarSidebar entries={entries} attachedEntryIds={attachedEntryIds} navigate={navigate} />
+                <CalendarSidebar entries={entries} attachedEntryIds={attachedEntryIds} attachmentTypes={attachmentTypes} navigate={navigate} />
               </div>
             )}
 
@@ -431,8 +457,8 @@ export default function EntryList() {
             <div className={viewMode === 'compact' ? 'space-y-1.5' : 'space-y-3'}>
               {filtered.map(entry =>
                 viewMode === 'compact'
-                  ? <CompactCard key={entry.id} entry={entry} hasAttachment={attachedEntryIds.has(entry.id)} onClick={() => navigate(`/entry/${entry.id}`)} />
-                  : <NormalCard key={entry.id} entry={entry} hasAttachment={attachedEntryIds.has(entry.id)} onClick={() => navigate(`/entry/${entry.id}`)} />
+                  ? <CompactCard key={entry.id} entry={entry} attTypes={attachmentTypes[entry.id]} onClick={() => navigate(`/entry/${entry.id}`)} />
+                  : <NormalCard key={entry.id} entry={entry} attTypes={attachmentTypes[entry.id]} onClick={() => navigate(`/entry/${entry.id}`)} />
               )}
             </div>
           </div>
@@ -442,6 +468,7 @@ export default function EntryList() {
             <CalendarSidebar
               entries={entries}
               attachedEntryIds={attachedEntryIds}
+              attachmentTypes={attachmentTypes}
               navigate={navigate}
             />
           </div>

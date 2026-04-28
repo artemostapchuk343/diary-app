@@ -10,6 +10,19 @@ const LANGUAGES = [
 
 const LANG_KEY = 'audio_lang'
 
+async function addPunctuation(text, bcp47) {
+  const tl = bcp47.split('-')[0]
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`
+    const resp = await fetch(url)
+    if (!resp.ok) return text
+    const data = await resp.json()
+    return data[0].map(s => s[0]).join('')
+  } catch {
+    return text
+  }
+}
+
 function fmt(s) {
   return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
 }
@@ -134,7 +147,8 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
   }
 
   async function handleInsert() {
-    onInsertText(transcript)
+    const text = await addPunctuation(transcript, lang)
+    onInsertText(text)
     onClose()
   }
 
@@ -148,7 +162,10 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
   }
 
   async function handleBoth() {
-    if (transcript) onInsertText(transcript)
+    if (transcript) {
+      const text = await addPunctuation(transcript, lang)
+      onInsertText(text)
+    }
     if (audioBlob) {
       const ext = audioBlob.type?.includes('ogg') ? 'ogg' : 'webm'
       const name = `voice-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.${ext}`

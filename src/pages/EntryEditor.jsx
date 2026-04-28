@@ -187,7 +187,18 @@ export default function EntryEditor() {
 
   async function handleLangClick(lang) {
     if (translating) return
-    if (detectedLang === lang) return
+
+    // When on a translation, clicking the primary (detected) language returns to primary
+    if (activeLang && detectedLang === lang) {
+      setActiveLang(null)
+      setTitle(entryData.title || '')
+      setBody(entryData.body || '')
+      setDirty(false)
+      return
+    }
+
+    // Already viewing primary — can't re-select the detected lang
+    if (!activeLang && detectedLang === lang) return
 
     // Clicking the active lang returns to primary
     if (activeLang === lang) {
@@ -403,7 +414,7 @@ export default function EntryEditor() {
     const isCurrent = detectedLang === code
     const isSaved = !!entryData?.translations?.[code]
     if (isActive) return 'bg-indigo-600 text-white'
-    if (isCurrent) return 'bg-white/5 text-slate-500 border border-white/10 opacity-50 cursor-default'
+    if (isCurrent && !activeLang) return 'bg-white/5 text-slate-500 border border-white/10 opacity-50 cursor-default'
     if (isSaved) return 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-600/40'
     return 'bg-white/5 text-slate-500 hover:text-slate-300 hover:bg-white/10'
   }
