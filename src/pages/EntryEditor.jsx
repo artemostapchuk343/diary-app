@@ -210,7 +210,7 @@ export default function EntryEditor() {
     }
 
     const saved = entryData?.translations?.[lang]
-    if (saved) {
+    if (saved && !dirty) {
       setActiveLang(lang)
       setTitle(saved.title || '')
       setBody(saved.body || '')
@@ -218,7 +218,10 @@ export default function EntryEditor() {
       return
     }
 
-    // No saved translation — auto-translate from primary
+    // Translate from the current primary state (not entryData) so unsaved audio text is included
+    const sourceTitle = activeLang ? (entryData?.title || '') : title
+    const sourceBody = activeLang ? (entryData?.body || '') : body
+
     setActiveLang(lang)
     setTitle('')
     setBody('')
@@ -226,8 +229,8 @@ export default function EntryEditor() {
     setTranslateError('')
     try {
       const [newTitle, newBody] = await Promise.all([
-        entryData?.title ? translateText(entryData.title, lang) : Promise.resolve(''),
-        entryData?.body ? translateText(entryData.body, lang) : Promise.resolve(''),
+        sourceTitle ? translateText(sourceTitle, lang) : Promise.resolve(''),
+        sourceBody ? translateText(sourceBody, lang) : Promise.resolve(''),
       ])
       setTitle(newTitle)
       setBody(newBody)
@@ -237,8 +240,8 @@ export default function EntryEditor() {
       setTranslateError('Translation failed. Try again.')
       setTimeout(() => setTranslateError(''), 3000)
       setActiveLang(null)
-      setTitle(entryData?.title || '')
-      setBody(entryData?.body || '')
+      setTitle(sourceTitle)
+      setBody(sourceBody)
     } finally {
       setTranslating(false)
     }
