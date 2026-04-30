@@ -10,16 +10,27 @@ const LANGUAGES = [
 
 const LANG_KEY = 'audio_lang'
 
+async function gtTranslate(text, sl, tl) {
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`
+  const resp = await fetch(url)
+  if (!resp.ok) return null
+  const data = await resp.json()
+  return data[0]?.filter(Boolean).map(s => s[0]).filter(Boolean).join('') || null
+}
+
 async function addPunctuationAndTranslate(text, bcp47, targetLang) {
-  // targetLang: entry's primary language code (e.g. 'uk', 'en') — if different from audio lang,
-  // Google Translate will both translate and add punctuation in one call
-  const tl = targetLang || bcp47.split('-')[0]
+  const audioLang = bcp47.split('-')[0]
+  const tl = targetLang || audioLang
   try {
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`
-    const resp = await fetch(url)
-    if (!resp.ok) return text
-    const data = await resp.json()
-    return data[0].filter(Boolean).map(s => s[0]).join('')
+    if (tl !== audioLang) {
+      // Cross-language: single step — translation naturally adds punctuation
+      return await gtTranslate(text, 'auto', tl) ?? text
+    }
+    // Same-language: pivot through English so the neural model adds punctuation
+    const pivot = tl === 'en' ? 'uk' : 'en'
+    const pivotText = await gtTranslate(text, 'auto', pivot)
+    if (!pivotText) return text
+    return await gtTranslate(pivotText, pivot, tl) ?? text
   } catch {
     return text
   }
