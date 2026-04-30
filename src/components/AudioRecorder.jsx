@@ -10,30 +10,35 @@ const LANGUAGES = [
 
 const LANG_KEY = 'audio_lang'
 
-async function gtTranslate(text, sl, tl) {
-  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`
-  const resp = await fetch(url)
-  if (!resp.ok) return null
-  const data = await resp.json()
-  return data[0]?.filter(Boolean).map(s => s[0]).filter(Boolean).join('') || null
+async function translateToLang(text, tl) {
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`
+    const resp = await fetch(url)
+    if (!resp.ok) return null
+    const data = await resp.json()
+    return data[0]?.filter(Boolean).map(s => s[0]).filter(Boolean).join('') || null
+  } catch {
+    return null
+  }
 }
 
-async function addPunctuationAndTranslate(text, bcp47, targetLang) {
+function basicCleanup(text) {
+  let t = text.trim()
+  if (!t) return t
+  t = t.charAt(0).toUpperCase() + t.slice(1)
+  if (!/[.!?…]$/.test(t)) t += '.'
+  return t
+}
+
+async function prepareTranscript(text, bcp47, targetLang) {
   const audioLang = bcp47.split('-')[0]
   const tl = targetLang || audioLang
-  try {
-    if (tl !== audioLang) {
-      // Cross-language: single step — translation naturally adds punctuation
-      return await gtTranslate(text, 'auto', tl) ?? text
-    }
-    // Same-language: pivot through English so the neural model adds punctuation
-    const pivot = tl === 'en' ? 'uk' : 'en'
-    const pivotText = await gtTranslate(text, 'auto', pivot)
-    if (!pivotText) return text
-    return await gtTranslate(pivotText, pivot, tl) ?? text
-  } catch {
-    return text
+  if (tl !== audioLang) {
+    // Cross-language: translate to entry language (adds punctuation naturally)
+    return await translateToLang(text, tl) ?? basicCleanup(text)
   }
+  // Same-language: just clean up — no translation
+  return basicCleanup(text)
 }
 
 function fmt(s) {
@@ -160,7 +165,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose, targ
   }
 
   async function handleInsert() {
-    const text = await addPunctuationAndTranslate(transcript, lang, targetLang)
+    const text = await prepareTranscript(transcript, lang, targetLang)
     onInsertText(text)
     onClose()
   }
@@ -176,7 +181,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose, targ
 
   async function handleBoth() {
     if (transcript) {
-      const text = await addPunctuationAndTranslate(transcript, lang, targetLang)
+      const text = await prepareTranscript(transcript, lang, targetLang)
       onInsertText(text)
     }
     if (audioBlob) {
