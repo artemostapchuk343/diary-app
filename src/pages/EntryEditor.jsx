@@ -437,6 +437,7 @@ export default function EntryEditor() {
           onInsertText={text => { setBody(prev => prev ? prev + '\n\n' + text : text); setDirty(true) }}
           onSaveAudio={att => { setAttachments(prev => [...prev, att]); setDirty(true) }}
           onClose={() => setShowRecorder(false)}
+          targetLang={detectedLang}
         />
       )}
       {showDeleteModal && (

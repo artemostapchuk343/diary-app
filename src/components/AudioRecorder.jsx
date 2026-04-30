@@ -10,14 +10,16 @@ const LANGUAGES = [
 
 const LANG_KEY = 'audio_lang'
 
-async function addPunctuation(text, bcp47) {
-  const tl = bcp47.split('-')[0]
+async function addPunctuationAndTranslate(text, bcp47, targetLang) {
+  // targetLang: entry's primary language code (e.g. 'uk', 'en') — if different from audio lang,
+  // Google Translate will both translate and add punctuation in one call
+  const tl = targetLang || bcp47.split('-')[0]
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`
     const resp = await fetch(url)
     if (!resp.ok) return text
     const data = await resp.json()
-    return data[0].map(s => s[0]).join('')
+    return data[0].filter(Boolean).map(s => s[0]).join('')
   } catch {
     return text
   }
@@ -27,7 +29,7 @@ function fmt(s) {
   return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
 }
 
-export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
+export default function AudioRecorder({ onInsertText, onSaveAudio, onClose, targetLang }) {
   const [phase, setPhase] = useState('idle') // idle | recording | preview
   const [lang, setLang] = useState(() => localStorage.getItem(LANG_KEY) || 'uk-UA')
   const [transcript, setTranscript] = useState('')
@@ -147,7 +149,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
   }
 
   async function handleInsert() {
-    const text = await addPunctuation(transcript, lang)
+    const text = await addPunctuationAndTranslate(transcript, lang, targetLang)
     onInsertText(text)
     onClose()
   }
@@ -163,7 +165,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
 
   async function handleBoth() {
     if (transcript) {
-      const text = await addPunctuation(transcript, lang)
+      const text = await addPunctuationAndTranslate(transcript, lang, targetLang)
       onInsertText(text)
     }
     if (audioBlob) {
