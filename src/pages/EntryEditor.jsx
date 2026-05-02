@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, Trash2, Paperclip, X, Image, Languages, Mic } from 'lucide-react'
 import MediaLightbox from '../components/MediaLightbox'
 import AudioRecorder from '../components/AudioRecorder'
@@ -133,6 +133,8 @@ export default function EntryEditor() {
   const { id } = useParams()
   const isNew = id === 'new'
   const navigate = useNavigate()
+  const location = useLocation()
+  const preselectedDate = isNew ? (location.state?.date ?? null) : null
   const photoRef = useRef()
   const fileRef = useRef()
 
@@ -251,6 +253,9 @@ export default function EntryEditor() {
     if (saveStatus !== 'idle' && saveStatus !== 'error') return
     setSaveStatus('saving')
     const now = new Date().toISOString()
+    const createdAt = preselectedDate
+      ? new Date(`${preselectedDate}T12:00:00`).toISOString()
+      : now
     let currentEntryData = entryData
 
     try {
@@ -259,12 +264,12 @@ export default function EntryEditor() {
         const newId = await db.entries.add({
           sourceId, title, body, mood,
           translations: {},
-          createdAt: now, updatedAt: now,
+          createdAt, updatedAt: now,
         })
         for (const att of attachments) {
           if (!att.id) await db.attachments.add({ ...att, entryId: newId })
         }
-        currentEntryData = { id: newId, sourceId, title, body, mood, translations: {}, createdAt: now, updatedAt: now }
+        currentEntryData = { id: newId, sourceId, title, body, mood, translations: {}, createdAt, updatedAt: now }
         setEntryData(currentEntryData)
         navigate(`/entry/${newId}`, { replace: true })
       } else if (activeLang) {

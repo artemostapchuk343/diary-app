@@ -135,9 +135,8 @@ function CompactCard({ entry, attTypes, onClick }) {
   )
 }
 
-function CalendarSidebar({ entries, attachedEntryIds, attachmentTypes, navigate }) {
+function CalendarSidebar({ entries, attachedEntryIds, attachmentTypes, navigate, selectedDay, setSelectedDay }) {
   const [month, setMonth] = useState(new Date())
-  const [selectedDay, setSelectedDay] = useState(format(new Date(), 'yyyy-MM-dd'))
 
   const byDate = {}
   entries.forEach(e => {
@@ -289,6 +288,7 @@ export default function EntryList() {
     return (saved === 'calendar' || !saved) ? 'normal' : saved
   })
   const [showCalendar, setShowCalendar] = useState(false)
+  const [selectedDay, setSelectedDay] = useState(format(new Date(), 'yyyy-MM-dd'))
   const importRef = useRef()
   const navigate = useNavigate()
   const lock = useAuth(s => s.lock)
@@ -406,7 +406,7 @@ export default function EntryList() {
 
             <div className="flex items-center gap-3 mb-5">
               <button
-                onClick={() => navigate('/entry/new')}
+                onClick={() => navigate('/entry/new', { state: { date: selectedDay } })}
                 className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl py-3 transition-colors"
               >
                 <Plus size={17} />
@@ -444,7 +444,7 @@ export default function EntryList() {
 
             {showCalendar && (
               <div className="lg:hidden mb-5">
-                <CalendarSidebar entries={entries} attachedEntryIds={attachedEntryIds} attachmentTypes={attachmentTypes} navigate={navigate} />
+                <CalendarSidebar entries={entries} attachedEntryIds={attachedEntryIds} attachmentTypes={attachmentTypes} navigate={navigate} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />
               </div>
             )}
 
@@ -470,6 +470,8 @@ export default function EntryList() {
               attachedEntryIds={attachedEntryIds}
               attachmentTypes={attachmentTypes}
               navigate={navigate}
+              selectedDay={selectedDay}
+              setSelectedDay={setSelectedDay}
             />
           </div>
         </div>
