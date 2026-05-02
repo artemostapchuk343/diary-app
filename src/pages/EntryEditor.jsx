@@ -464,7 +464,7 @@ export default function EntryEditor() {
           </button>
           <div className="flex items-center gap-3">
             <span className="text-slate-500 text-sm">
-              {format(entryData ? new Date(entryData.createdAt) : new Date(), 'd MMM yyyy')}
+              {format(entryData ? new Date(entryData.createdAt) : preselectedDate ? new Date(`${preselectedDate}T12:00:00`) : new Date(), 'd MMM yyyy')}
             </span>
             {!isNew && (
               <button onClick={handleDeleteClick} disabled={busy} className="text-slate-500 hover:text-red-400 disabled:opacity-30 transition-colors">
