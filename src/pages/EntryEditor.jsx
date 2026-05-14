@@ -137,6 +137,7 @@ export default function EntryEditor() {
   const preselectedDate = isNew ? (location.state?.date ?? null) : null
   const photoRef = useRef()
   const fileRef = useRef()
+  const textareaRef = useRef()
 
   const [entryData, setEntryData] = useState(null)
   const [activeLang, setActiveLang] = useState(null) // null = viewing primary
@@ -154,6 +155,13 @@ export default function EntryEditor() {
   const [editing, setEditing] = useState(isNew)
   const [detectedLang, setDetectedLang] = useState(null)
   const [showRecorder, setShowRecorder] = useState(false)
+
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [body, editing])
 
   useEffect(() => {
     if (!isNew) loadEntry()
@@ -557,10 +565,11 @@ export default function EntryEditor() {
           {/* Body */}
           {editing ? (
             <textarea
+              ref={textareaRef}
               placeholder="Write your thoughts…"
               value={body}
               onChange={e => { setBody(e.target.value); setDirty(true) }}
-              className="bg-transparent text-slate-200 placeholder-slate-600 outline-none border-none resize-none text-lg leading-relaxed w-full min-h-48"
+              className="bg-transparent text-slate-200 placeholder-slate-600 outline-none border-none resize-none text-lg leading-relaxed w-full min-h-64 overflow-hidden"
             />
           ) : (
             <div className="text-slate-200 text-lg leading-relaxed whitespace-pre-wrap">
