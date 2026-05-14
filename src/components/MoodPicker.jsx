@@ -2,12 +2,35 @@ import { useState, useRef, useEffect } from 'react'
 import { Smile } from 'lucide-react'
 
 const MOODS = [
-  '😊', '😔', '😤', '😴', '🥰', '😰', '🤔', '🎉', '😌', '🔥',
-  '😂', '😭', '😍', '🥺', '😎', '🤯', '😇', '🤩', '😏', '😒',
-  '😳', '🥴', '😵', '🤧', '😷', '🤒', '😬', '🙄', '😶', '🤐',
-  '😡', '🤬', '😈', '💀', '🫠', '🥹', '🫡', '🤫', '🫢', '😮',
-  '❤️', '💔', '💪', '🙏', '✨', '🌙', '☀️', '🌧️', '⚡', '🌈',
-  '🍀', '🌸', '🎵', '🎯', '💡', '📚', '💤', '🏃', '🧘', '🍕',
+  // Happy / positive
+  '😊', '😁', '😄', '🤩', '🥰', '😍', '🥳', '🎉', '😇', '🤗',
+  '😌', '😎', '🤭', '😏', '🫶', '💪', '✌️', '👌', '🙌', '👏',
+  // Sad / negative
+  '😔', '😢', '😭', '😞', '😟', '🥺', '😿', '💔', '😓', '😥',
+  '😰', '😨', '😱', '😫', '😩', '🥱', '😴', '😪', '🫥', '😶',
+  // Angry / frustrated
+  '😤', '😡', '🤬', '😾', '👿', '😈', '💢', '🤯', '😣', '😖',
+  // Sick / unwell
+  '🤒', '🤧', '😷', '🤮', '🥴', '😵', '😵‍💫', '🤕', '🥶', '🥵',
+  // Silly / playful
+  '😂', '🤣', '😜', '🤪', '😝', '🙃', '🫠', '😬', '🙄', '😒',
+  '🤫', '🫢', '🫣', '🤐', '😮', '😲', '🫨', '🥸', '🧐', '🤓',
+  // Contemplative
+  '🤔', '😳', '🫡', '🥹', '😦', '😧', '🤨', '😐', '😑', '🙏',
+  // Love / relationships
+  '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '💕', '💞',
+  '💖', '💗', '💘', '💝', '💫', '✨', '🌹', '💐', '🫂', '👫',
+  // Nature / weather
+  '☀️', '🌤️', '⛅', '🌧️', '⛈️', '🌩️', '❄️', '🌈', '🌙', '⭐',
+  '🌊', '🍃', '🌸', '🌺', '🌻', '🍀', '🌿', '🍂', '🌾', '⚡',
+  // Activities / hobbies
+  '🏃', '🧘', '🏋️', '🚴', '🎮', '🎵', '🎨', '📚', '✍️', '🎯',
+  '🎬', '🎤', '🎧', '🏖️', '⛺', '✈️', '🚗', '🍳', '🛒', '💤',
+  // Food / drinks
+  '🍕', '🍔', '🍜', '🍣', '🍩', '🎂', '🍺', '🍷', '☕', '🧋',
+  // Symbols / misc
+  '🔥', '💡', '💤', '💯', '🎊', '🏆', '🥇', '💰', '📱', '🌍',
+  '💀', '👻', '🫀', '🧠', '👁️', '🌀', '⚽', '🎲', '🪄', '🔮',
 ]
 
 export default function MoodPicker({ value, onChange }) {
@@ -55,8 +78,8 @@ export default function MoodPicker({ value, onChange }) {
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-2 z-50 bg-[#1a1a2e] border border-white/10 rounded-2xl p-4 shadow-2xl w-64 sm:w-80">
-          <div className="grid grid-cols-6 sm:grid-cols-10 gap-1">
+        <div className="absolute top-full left-0 mt-2 z-50 bg-[#1a1a2e] border border-white/10 rounded-2xl p-4 shadow-2xl w-72 sm:w-96">
+          <div className="grid grid-cols-8 sm:grid-cols-10 gap-1 max-h-72 overflow-y-auto">
             {MOODS.map(emoji => (
               <button
                 key={emoji}
