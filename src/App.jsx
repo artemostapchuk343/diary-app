@@ -26,6 +26,7 @@ function Guard({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <div className="bg-layer" aria-hidden="true" />
       <Guard>
         <Routes>
           <Route path="/" element={<EntryList />} />
