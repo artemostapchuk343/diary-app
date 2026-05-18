@@ -20,12 +20,13 @@ body {
 body::before {
   content: '';
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100lvh;
   z-index: -1;
   background:
     radial-gradient(ellipse 162% 86% at 0% 100%, #0d2e18 0%, transparent 70%),
     radial-gradient(ellipse 145% 100% at 110% -6%, #1a3d28 0%, transparent 62%),
     #0e1310;
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
 }
