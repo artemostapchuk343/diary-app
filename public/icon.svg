@@ -1,10 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <rect width="100" height="100" rx="18" fill="#0f1a11"/>
-  <rect x="18" y="16" width="58" height="68" rx="5" fill="none" stroke="#8fb8a0" stroke-width="3.5"/>
-  <line x1="33" y1="16" x2="33" y2="84" stroke="#5a8c72" stroke-width="4.5" stroke-linecap="round"/>
-  <line x1="43" y1="35" x2="67" y2="35" stroke="#8fb8a0" stroke-width="2.5" stroke-linecap="round" opacity="0.65"/>
-  <line x1="43" y1="47" x2="67" y2="47" stroke="#8fb8a0" stroke-width="2.5" stroke-linecap="round" opacity="0.65"/>
-  <line x1="43" y1="59" x2="67" y2="59" stroke="#8fb8a0" stroke-width="2.5" stroke-linecap="round" opacity="0.65"/>
-  <line x1="43" y1="71" x2="57" y2="71" stroke="#8fb8a0" stroke-width="2.5" stroke-linecap="round" opacity="0.40"/>
-  <path d="M62 16 L62 38 L70.5 32 L79 38 L79 16 Z" fill="#5a8c72"/>
+  <defs>
+    <linearGradient id="grad" gradientUnits="userSpaceOnUse" x1="18" y1="82" x2="82" y2="18">
+      <stop offset="0%" stop-color="#5aad78"/>
+      <stop offset="100%" stop-color="#9ecfb0"/>
+    </linearGradient>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="20"/>
+    </filter>
+    <clipPath id="clip">
+      <rect width="100" height="100" rx="22"/>
+    </clipPath>
+  </defs>
+
+  <rect width="100" height="100" rx="22" fill="#0f1a11"/>
+  <g clip-path="url(#clip)">
+    <circle cx="8"  cy="96" r="56" fill="#1f6035" opacity="0.85" filter="url(#blur)"/>
+    <circle cx="92" cy="8"  r="48" fill="#254d3a" opacity="0.65" filter="url(#blur)"/>
+  </g>
+
+  <rect x="18" y="16" width="58" height="68" rx="5" fill="url(#grad)" opacity="0.12"/>
+  <rect x="18" y="16" width="58" height="68" rx="5" fill="none" stroke="url(#grad)" stroke-width="3"/>
+  <line x1="33" y1="16" x2="33" y2="84" stroke="url(#grad)" stroke-width="4.5" stroke-linecap="round"/>
+  <line x1="43" y1="35" x2="67" y2="35" stroke="url(#grad)" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+  <line x1="43" y1="47" x2="67" y2="47" stroke="url(#grad)" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+  <line x1="43" y1="59" x2="67" y2="59" stroke="url(#grad)" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+  <line x1="43" y1="71" x2="57" y2="71" stroke="url(#grad)" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+  <path d="M62 16 L62 38 L70.5 32 L79 38 L79 16 Z" fill="url(#grad)"/>
 </svg>

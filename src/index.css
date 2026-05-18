@@ -33,7 +33,7 @@ body {
   width: 100vw;
   height: 100vh;
   background:
-    radial-gradient(ellipse 162% 86% at 0% 100%, #0d2e18 0%, transparent 70%),
-    radial-gradient(ellipse 145% 100% at 110% -6%, #1a3d28 0%, transparent 62%),
+    radial-gradient(ellipse 162% 86% at 0% 100%, #1a5c32 0%, transparent 70%),
+    radial-gradient(ellipse 145% 100% at 110% -6%, #2a6840 0%, transparent 62%),
     #0e1310;
 }
