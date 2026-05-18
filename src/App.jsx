@@ -23,20 +23,16 @@ function Guard({ children }) {
   return unlocked ? children : <LockScreen />
 }
 
-const BG = 'radial-gradient(ellipse 162% 86% at 0% 100%, #0d2e18 0%, transparent 70%), radial-gradient(ellipse 145% 100% at 110% -6%, #1a3d28 0%, transparent 62%), #0e1310'
-
 export default function App() {
   return (
     <BrowserRouter>
-      <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: BG }}>
-        <Guard>
-          <Routes>
-            <Route path="/" element={<EntryList />} />
-            <Route path="/entry/:id" element={<EntryEditor />} />
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        </Guard>
-      </div>
+      <Guard>
+        <Routes>
+          <Route path="/" element={<EntryList />} />
+          <Route path="/entry/:id" element={<EntryEditor />} />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </Guard>
     </BrowserRouter>
   )
 }
