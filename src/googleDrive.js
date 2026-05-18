@@ -597,7 +597,7 @@ export async function downloadProfilePic() {
   }
 }
 
-export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry, onSaveAttachment }) {
+export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry, onDeleteEntry, onSaveAttachment }) {
   const [driveFiles, driveAttachFiles, { ids: deletedIds }] = await Promise.all([
     listDriveEntries(),
     listDriveAttachments(),
@@ -649,9 +649,15 @@ export async function sync(localEntries, { onProgress, onNewEntry, onDeleteEntry
       const isFlat = oldParentId === rootId
 
       if (localTime > driveTime) {
-        // Update content; also migrates to day folder if currently in old flat location
+        // Local is newer — upload to Drive
         await uploadFile(content, entry, driveFile.id, oldParentId)
         uploaded++
+      } else if (driveTime > localTime) {
+        // Drive is newer — download and update local
+        const driveContent = await downloadFile(driveFile.id)
+        const parsed = markdownToEntry(driveContent)
+        if (parsed) await onUpdateEntry?.(entry, parsed)
+        downloaded++
       } else if (isFlat) {
         // Content is up-to-date but file is in old flat location — move it
         const dayFolderId = await getDayFolder(date)
