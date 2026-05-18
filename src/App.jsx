@@ -4,6 +4,7 @@ import { useAuth } from './useAuth'
 import LockScreen from './pages/LockScreen'
 import EntryList from './pages/EntryList'
 import EntryEditor from './pages/EntryEditor'
+
 function Guard({ children }) {
   const unlocked = useAuth(s => s.unlocked)
   const initializing = useAuth(s => s.initializing)
@@ -22,16 +23,20 @@ function Guard({ children }) {
   return unlocked ? children : <LockScreen />
 }
 
+const BG = 'radial-gradient(ellipse 162% 86% at 0% 100%, #0d2e18 0%, transparent 70%), radial-gradient(ellipse 145% 100% at 110% -6%, #1a3d28 0%, transparent 62%), #0e1310'
+
 export default function App() {
   return (
     <BrowserRouter>
-      <Guard>
-        <Routes>
-          <Route path="/" element={<EntryList />} />
-          <Route path="/entry/:id" element={<EntryEditor />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </Guard>
+      <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', background: BG }}>
+        <Guard>
+          <Routes>
+            <Route path="/" element={<EntryList />} />
+            <Route path="/entry/:id" element={<EntryEditor />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </Guard>
+      </div>
     </BrowserRouter>
   )
 }
