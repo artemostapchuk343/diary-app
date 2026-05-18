@@ -8,10 +8,9 @@ body {
   margin: 0;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
   background:
-    radial-gradient(ellipse 85% 65% at 0% 100%, #27622e 0%, transparent 55%),
-    radial-gradient(ellipse 65% 55% at 100% 0%, #214f28 0%, transparent 52%),
-    radial-gradient(ellipse 40% 35% at 50% 50%, #152318 0%, transparent 70%),
-    #111c14;
+    radial-gradient(ellipse 162% 86% at 0% 100%, #0d2e18 0%, transparent 70%),
+    radial-gradient(ellipse 145% 100% at 110% -6%, #1a3d28 0%, transparent 62%),
+    #0e1310;
   color: #e2e8f0;
   -webkit-font-smoothing: antialiased;
 }
