@@ -14,4 +14,18 @@ body {
   background: transparent;
   color: #e2e8f0;
   -webkit-font-smoothing: antialiased;
+  -webkit-overflow-scrolling: touch;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 162% 86% at 0% 100%, #0d2e18 0%, transparent 70%),
+    radial-gradient(ellipse 145% 100% at 110% -6%, #1a3d28 0%, transparent 62%),
+    #0e1310;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
