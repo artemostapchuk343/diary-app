@@ -10,22 +10,30 @@ const REDIRECT_URI = window.location.origin
 const CONNECTED_KEY = 'gdrive_was_connected'
 const REFRESH_TOKEN_KEY = 'gdrive_refresh_token'
 const VERIFIER_KEY = 'gdrive_pkce_verifier'
+const ROOT_FOLDER_KEY = 'gdrive_root_folder_id'
+const CONFIG_FOLDER_KEY = 'gdrive_config_folder_id'
+
+const SYNC_BATCH = 6 // max parallel entry operations
 
 let accessToken = null
 let refreshTimer = null
 let tokenExchangePromise = null
 
-// In-session folder ID cache — avoids redundant Drive API calls
-let rootFolderId = null
-let configFolderId = null
-const monthFolderCache = {}  // 'MM.YYYY' → id
-const dayFolderCache = {}    // 'MM.YYYY/DD' → id
+// Folder ID cache — persisted to localStorage so subsequent syncs skip the lookup
+let rootFolderId = localStorage.getItem(ROOT_FOLDER_KEY) || null
+let configFolderId = localStorage.getItem(CONFIG_FOLDER_KEY) || null
+const monthFolderCache = {}
+const dayFolderCache = {}
+const folderPromises = {} // deduplicates concurrent getDayFolder calls for the same key
 
 function clearFolderCache() {
   rootFolderId = null
   configFolderId = null
+  localStorage.removeItem(ROOT_FOLDER_KEY)
+  localStorage.removeItem(CONFIG_FOLDER_KEY)
   Object.keys(monthFolderCache).forEach(k => delete monthFolderCache[k])
   Object.keys(dayFolderCache).forEach(k => delete dayFolderCache[k])
+  Object.keys(folderPromises).forEach(k => delete folderPromises[k])
 }
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -216,33 +224,52 @@ async function getRootFolder() {
     `/files?q=name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)&pageSize=1`
   )
   const { files } = await resp.json()
-  if (files?.length) { rootFolderId = files[0].id; return rootFolderId }
-  const create = await api('/files', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }),
-  })
-  rootFolderId = (await create.json()).id
+  if (files?.length) {
+    rootFolderId = files[0].id
+  } else {
+    const create = await api('/files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }),
+    })
+    rootFolderId = (await create.json()).id
+  }
+  localStorage.setItem(ROOT_FOLDER_KEY, rootFolderId)
   return rootFolderId
 }
 
 async function getConfigFolder() {
   if (configFolderId) return configFolderId
   configFolderId = await getOrCreateSubfolder(CONFIG_FOLDER_NAME, await getRootFolder())
+  localStorage.setItem(CONFIG_FOLDER_KEY, configFolderId)
   return configFolderId
 }
 
 // isoDate: '2026-04-27' → creates My Diary/04.2026/27/
+// Uses promise deduplication so concurrent calls for the same day share one request.
 async function getDayFolder(isoDate) {
   const [year, month, day] = isoDate.split('-')
   const monthKey = `${month}.${year}`
   const dayKey = `${monthKey}/${day}`
+
   if (dayFolderCache[dayKey]) return dayFolderCache[dayKey]
-  if (!monthFolderCache[monthKey]) {
-    monthFolderCache[monthKey] = await getOrCreateSubfolder(monthKey, await getRootFolder())
+
+  if (!folderPromises[dayKey]) {
+    folderPromises[dayKey] = (async () => {
+      if (!monthFolderCache[monthKey]) {
+        if (!folderPromises[monthKey]) {
+          folderPromises[monthKey] = getOrCreateSubfolder(monthKey, await getRootFolder())
+            .then(id => { monthFolderCache[monthKey] = id; return id })
+        }
+        await folderPromises[monthKey]
+      }
+      const id = await getOrCreateSubfolder(day, monthFolderCache[monthKey])
+      dayFolderCache[dayKey] = id
+      return id
+    })()
   }
-  dayFolderCache[dayKey] = await getOrCreateSubfolder(day, monthFolderCache[monthKey])
-  return dayFolderCache[dayKey]
+
+  return folderPromises[dayKey]
 }
 
 // ─── Entry serialisation ──────────────────────────────────────────────────────
@@ -287,10 +314,6 @@ export function markdownToEntry(content) {
 }
 
 // ─── File listing ─────────────────────────────────────────────────────────────
-//
-// Using broad queries without parent filter. With drive.file scope the API only
-// returns files created by this app, so broad queries are safe.
-// Including `parents` in fields so sync can detect and migrate old flat files.
 
 async function listDriveEntries() {
   const resp = await api(
@@ -298,7 +321,6 @@ async function listDriveEntries() {
     `&fields=files(id,name,modifiedTime,appProperties,parents)&pageSize=1000`
   )
   const { files } = await resp.json()
-  // Filter to files that carry entryId (excludes any stray text files)
   return (files || []).filter(f => f.appProperties?.entryId)
 }
 
@@ -336,9 +358,6 @@ async function downloadAttachmentAsDataUrl(fileId) {
   })
 }
 
-// Uploads or updates an entry .md file.
-// oldParentId: when provided and differs from the target day folder, the file
-// is moved to the correct location in the same request.
 async function uploadFile(content, entry, existingDriveFileId = null, oldParentId = null) {
   const date = (entry.createdAt || new Date().toISOString()).slice(0, 10)
   const dayFolderId = await getDayFolder(date)
@@ -369,7 +388,6 @@ async function uploadFile(content, entry, existingDriveFileId = null, oldParentI
   await uploadApi(urlPath, { method: existingDriveFileId ? 'PATCH' : 'POST', body: form })
 }
 
-// Uploads or updates an attachment file.
 async function uploadAttachment(attachment, entryCanonicalId, entryCreatedAt, existingFileId = null, oldParentId = null) {
   const date = (entryCreatedAt || new Date().toISOString()).slice(0, 10)
   const dayFolderId = await getDayFolder(date)
@@ -400,20 +418,16 @@ async function uploadAttachment(attachment, entryCanonicalId, entryCreatedAt, ex
 }
 
 // ─── Config files (tombstone + password) ─────────────────────────────────────
-//
-// Stored in _config/. Migrates automatically from old flat location on first use.
 
 async function findOrMigrateConfigFile(name) {
   const configId = await getConfigFolder()
 
-  // Check new location first
   let resp = await api(
     `/files?q=name='${name}' and '${configId}' in parents and trashed=false&fields=files(id)&pageSize=1`
   )
   let { files } = await resp.json()
   if (files?.length) return files[0].id
 
-  // Check old flat location and migrate if found
   const rootId = await getRootFolder()
   resp = await api(
     `/files?q=name='${name}' and '${rootId}' in parents and trashed=false&fields=files(id)&pageSize=1`
@@ -473,7 +487,6 @@ export async function markEntryDeleted(entry) {
     const entryFile = driveFiles.find(f => f.appProperties?.entryId === cid)
     if (entryFile) await api(`/files/${entryFile.id}`, { method: 'DELETE' })
 
-    // Delete all attachments for this entry
     for (const att of driveAtts.filter(f => f.appProperties?.entryId === cid)) {
       await api(`/files/${att.id}`, { method: 'DELETE' })
     }
@@ -597,6 +610,14 @@ export async function downloadProfilePic() {
   }
 }
 
+// Processes an array of items in parallel batches, calling fn(item) for each.
+// Items are processed newest-first (already sorted by caller).
+async function inBatches(items, fn) {
+  for (let i = 0; i < items.length; i += SYNC_BATCH) {
+    await Promise.all(items.slice(i, i + SYNC_BATCH).map(fn))
+  }
+}
+
 export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry, onDeleteEntry, onSaveAttachment }) {
   const [driveFiles, driveAttachFiles, { ids: deletedIds }] = await Promise.all([
     listDriveEntries(),
@@ -633,10 +654,15 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
     }
   }
 
-  const entriesToUpload = localEntries.filter(e => !deletedSet.has(canonicalId(e)))
-  let uploaded = 0, downloaded = 0
+  // Sort newest-first so recent entries are uploaded/downloaded first
+  const entriesToUpload = localEntries
+    .filter(e => !deletedSet.has(canonicalId(e)))
+    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
 
-  for (const entry of entriesToUpload) {
+  let uploaded = 0, downloaded = 0
+  let processed = 0
+
+  await inBatches(entriesToUpload, async entry => {
     const cid = canonicalId(entry)
     const driveFile = driveByEntryId[cid]
     const content = entryToMarkdown(entry)
@@ -649,17 +675,14 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
       const isFlat = oldParentId === rootId
 
       if (localTime > driveTime) {
-        // Local is newer — upload to Drive
         await uploadFile(content, entry, driveFile.id, oldParentId)
         uploaded++
       } else if (driveTime > localTime) {
-        // Drive is newer — download and update local
         const driveContent = await downloadFile(driveFile.id)
         const parsed = markdownToEntry(driveContent)
         if (parsed) await onUpdateEntry?.(entry, parsed)
         downloaded++
       } else if (isFlat) {
-        // Content is up-to-date but file is in old flat location — move it
         const dayFolderId = await getDayFolder(date)
         await api(`/files/${driveFile.id}?addParents=${dayFolderId}&removeParents=${rootId}`, {
           method: 'PATCH',
@@ -676,14 +699,12 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
     const driveAttNames = new Set(Object.keys(driveAttsForEntry))
     const localAttNames = new Set((entry.attachments || []).map(a => a.name))
 
-    // Upload local attachments not yet on Drive
     for (const att of (entry.attachments || [])) {
       if (!driveAttNames.has(att.name)) {
         await uploadAttachment(att, cid, entry.createdAt)
       }
     }
 
-    // Download Drive attachments not yet local; migrate flat ones
     for (const [attName, driveAtt] of Object.entries(driveAttsForEntry)) {
       if (!localAttNames.has(attName)) {
         try {
@@ -698,36 +719,28 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
           console.error('Failed to download attachment:', attName, e)
         }
       }
-
-      // Migrate attachment from old flat location
-      if (driveAtt.parents?.[0] === rootId) {
-        try {
-          const dayFolderId = await getDayFolder(date)
-          await api(`/files/${driveAtt.id}?addParents=${dayFolderId}&removeParents=${rootId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
-          })
-        } catch {}
-      }
     }
 
-    onProgress?.(`Syncing… ${uploaded}/${entriesToUpload.length}`)
-  }
-
-  // Download Drive-only entries + their attachments
-  const driveOnlyFiles = driveFiles.filter(f => {
-    const eid = f.appProperties?.entryId
-    return eid && !localByCanonicalId[eid] && !deletedSet.has(eid)
+    processed++
+    onProgress?.(`Syncing… ${processed}/${entriesToUpload.length}`)
   })
 
-  for (const f of driveOnlyFiles) {
+  // Download Drive-only entries, newest modifiedTime first
+  const driveOnlyFiles = driveFiles
+    .filter(f => {
+      const eid = f.appProperties?.entryId
+      return eid && !localByCanonicalId[eid] && !deletedSet.has(eid)
+    })
+    .sort((a, b) => new Date(b.modifiedTime) - new Date(a.modifiedTime))
+
+  let dlProcessed = 0
+  await inBatches(driveOnlyFiles, async f => {
     const content = await downloadFile(f.id)
     const parsed = markdownToEntry(content)
     if (parsed) {
       const newLocalId = await onNewEntry(parsed)
       downloaded++
-      for (const driveAtt of Object.values(driveAttsByEntryId[parsed.id] || {})) {
+      await inBatches(Object.values(driveAttsByEntryId[parsed.id] || {}), async driveAtt => {
         try {
           const dataUrl = await downloadAttachmentAsDataUrl(driveAtt.id)
           await onSaveAttachment?.(newLocalId, {
@@ -739,10 +752,11 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
         } catch (e) {
           console.error('Failed to download attachment:', driveAtt.name, e)
         }
-      }
+      })
     }
-    onProgress?.(`Downloading… ${downloaded}/${driveOnlyFiles.length}`)
-  }
+    dlProcessed++
+    onProgress?.(`Downloading… ${dlProcessed}/${driveOnlyFiles.length}`)
+  })
 
   return { uploaded, downloaded }
 }
