@@ -9,7 +9,7 @@ const MOROCCO = {
   flag: '🇲🇦',
   dates: { from: '2026-05-05', to: '2026-05-12' },
   days: 8,
-  totalPLN: 4649,
+  totalPLN: 4399,
   color: '#c87533',   // earthy amber
   gradient: 'from-amber-900/60 to-orange-950/80',
   sections: [
@@ -17,11 +17,10 @@ const MOROCCO = {
       id: 'flights',
       label: 'Flights & Airport',
       icon: '✈️',
-      total: 1035,
+      total: 785,
       items: [
         { name: 'Wizzair — WAW → RAK → WAW', amount: 648, note: 'mBank 23 Apr' },
         { name: 'Flight food (onboard)', amount: 69 },
-        { name: 'Airport parking Warsaw', amount: 250, note: 'mBank 12 May' },
         { name: 'Gate Retail at airport (snacks)', amount: 68, note: 'Millennium 13 May' },
       ],
     },
@@ -85,6 +84,7 @@ const MOROCCO = {
   ],
 }
 
+const TRIPS_VERSION = 2
 const INITIAL_TRIPS = [MOROCCO]
 
 export const useTravelData = create((set, get) => ({
@@ -93,21 +93,26 @@ export const useTravelData = create((set, get) => ({
 
   load: async () => {
     const row = await db.settings.get('trips')
-    set({ trips: row?.value ?? INITIAL_TRIPS, loaded: true })
-    if (!row) {
-      await db.settings.put({ key: 'trips', value: INITIAL_TRIPS })
+    const stored = row?.value
+    // Re-seed when no data or version is outdated
+    if (!stored || !stored._v || stored._v < TRIPS_VERSION) {
+      const data = { _v: TRIPS_VERSION, list: INITIAL_TRIPS }
+      await db.settings.put({ key: 'trips', value: data })
+      set({ trips: INITIAL_TRIPS, loaded: true })
+      return
     }
+    set({ trips: stored.list ?? INITIAL_TRIPS, loaded: true })
   },
 
   addTrip: async (trip) => {
     const trips = [...(get().trips ?? []), trip]
-    await db.settings.put({ key: 'trips', value: trips })
+    await db.settings.put({ key: 'trips', value: { _v: TRIPS_VERSION, list: trips } })
     set({ trips })
   },
 
   updateTrip: async (id, patch) => {
     const trips = (get().trips ?? []).map(t => t.id === id ? { ...t, ...patch } : t)
-    await db.settings.put({ key: 'trips', value: trips })
+    await db.settings.put({ key: 'trips', value: { _v: TRIPS_VERSION, list: trips } })
     set({ trips })
   },
 }))
