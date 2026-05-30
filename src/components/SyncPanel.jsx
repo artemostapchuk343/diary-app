@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Cloud, CloudOff, RefreshCw, LogOut, AlertCircle } from 'lucide-react'
+import { Cloud, CloudOff, RefreshCw, LogOut, AlertCircle, CheckCircle } from 'lucide-react'
 import { isConfigured, isSignedIn, signIn, signOut, silentSignIn } from '../googleDrive'
 import { useSync } from '../useSync'
 
@@ -38,9 +38,7 @@ export default function SyncPanel() {
     return () => window.removeEventListener('gdrive-connected', onConnected)
   }, [])
 
-  function handleConnect() {
-    signIn()
-  }
+  function handleConnect() { signIn() }
 
   function handleDisconnect() {
     signOut()
@@ -49,33 +47,52 @@ export default function SyncPanel() {
 
   if (!isConfigured()) return null
 
-  const lastSyncLabel = lastSync
-    ? new Date(lastSync).toLocaleTimeString()
-    : localStorage.getItem('last_sync')
+  const synced = result && !syncing
+  const hasChanges = synced && (result.uploaded > 0 || result.downloaded > 0)
+
+  function syncedLabel() {
+    const parts = []
+    if (result.uploaded > 0) parts.push(`↑${result.uploaded}`)
+    if (result.downloaded > 0) parts.push(`↓${result.downloaded}`)
+    const changes = parts.length ? `${parts.join(' ')} · ` : ''
+    const total = result.total != null ? `${result.total} entries · ` : ''
+    return `${changes}${total}${lastSync ? relativeTime(lastSync) : ''}`
+  }
 
   return (
-    <div className="mt-2 mb-6 bg-white/5 border border-white/10 rounded-xl px-5 py-4">
+    <div className={`mt-2 mb-6 border rounded-xl px-5 py-4 transition-colors duration-500 ${
+      synced
+        ? 'bg-emerald-950/40 border-emerald-800/50'
+        : 'bg-white/5 border-white/10'
+    }`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {connected
-            ? <Cloud size={20} className="text-indigo-400" />
-            : <CloudOff size={20} className="text-slate-500" />
+          {synced
+            ? <CheckCircle size={20} className="text-emerald-400 shrink-0" />
+            : connected
+              ? <Cloud size={20} className="text-indigo-400 shrink-0" />
+              : <CloudOff size={20} className="text-slate-500 shrink-0" />
           }
           <div>
-            <p className="text-white text-sm font-medium">
-              {connected ? 'Google Drive connected' : 'Google Drive'}
+            <p className={`text-sm font-medium ${synced ? 'text-emerald-300' : 'text-white'}`}>
+              {synced ? 'Synced' : connected ? 'Google Drive connected' : 'Google Drive'}
             </p>
-            {connected && !syncing && !result && lastSyncLabel && (
-              <p className="text-slate-500 text-xs">Last sync: {lastSyncLabel}</p>
+
+            {connected && !syncing && !result && (() => {
+              const label = lastSync
+                ? new Date(lastSync).toLocaleTimeString()
+                : localStorage.getItem('last_sync')
+              return label
+                ? <p className="text-slate-500 text-xs">Last sync: {label}</p>
+                : null
+            })()}
+
+            {syncing && (
+              <p className="text-slate-400 text-xs">{progress || 'Syncing…'}</p>
             )}
-            {syncing && <p className="text-slate-400 text-xs">{progress || 'Syncing…'}</p>}
-            {result && !syncing && result.uploaded === 0 && result.downloaded === 0 && (
-              <p className="text-emerald-400 text-xs">Up to date · {lastSync ? relativeTime(lastSync) : ''}</p>
-            )}
-            {result && !syncing && (result.uploaded > 0 || result.downloaded > 0) && (
-              <p className="text-slate-400 text-xs">
-                ↑ {result.uploaded} · ↓ {result.downloaded} · {lastSync ? relativeTime(lastSync) : ''}
-              </p>
+
+            {synced && (
+              <p className="text-emerald-500 text-xs">{syncedLabel()}</p>
             )}
           </div>
         </div>

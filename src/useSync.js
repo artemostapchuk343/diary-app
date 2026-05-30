@@ -90,9 +90,10 @@ export const useSync = create((set, get) => ({
         }
       }).catch(() => {})
 
+      const total = await db.entries.count()
       const now = Date.now()
       localStorage.setItem('last_sync', new Date(now).toLocaleTimeString())
-      set({ result: res, lastSync: now })
+      set({ result: { ...res, total }, lastSync: now })
     } catch (e) {
       console.error('Auto-sync error:', e)
       set({ error: e.message })

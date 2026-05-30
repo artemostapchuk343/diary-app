@@ -660,7 +660,17 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
 
   let uploaded = 0, downloaded = 0
-  let processed = 0
+
+  // Unified monotonic counter across both passes — no jumping between phases
+  const driveOnlyFiles = driveFiles
+    .filter(f => {
+      const eid = f.appProperties?.entryId
+      return eid && !localByCanonicalId[eid] && !deletedSet.has(eid)
+    })
+    .sort((a, b) => new Date(b.modifiedTime) - new Date(a.modifiedTime))
+
+  const totalSteps = entriesToUpload.length + driveOnlyFiles.length
+  let done = 0
 
   await inBatches(entriesToUpload, async entry => {
     const cid = canonicalId(entry)
@@ -721,19 +731,10 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
       }
     }
 
-    processed++
-    onProgress?.(`Syncing… ${processed}/${entriesToUpload.length}`)
+    done++
+    onProgress?.(`Syncing… ${done}/${totalSteps}`)
   })
 
-  // Download Drive-only entries, newest modifiedTime first
-  const driveOnlyFiles = driveFiles
-    .filter(f => {
-      const eid = f.appProperties?.entryId
-      return eid && !localByCanonicalId[eid] && !deletedSet.has(eid)
-    })
-    .sort((a, b) => new Date(b.modifiedTime) - new Date(a.modifiedTime))
-
-  let dlProcessed = 0
   await inBatches(driveOnlyFiles, async f => {
     const content = await downloadFile(f.id)
     const parsed = markdownToEntry(content)
@@ -754,8 +755,8 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
         }
       })
     }
-    dlProcessed++
-    onProgress?.(`Downloading… ${dlProcessed}/${driveOnlyFiles.length}`)
+    done++
+    onProgress?.(`Syncing… ${done}/${totalSteps}`)
   })
 
   return { uploaded, downloaded }
