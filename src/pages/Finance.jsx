@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Upload, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Upload, RefreshCw, Pencil } from 'lucide-react'
 import { useFinance, CATEGORIES, computeFixedTotal, computeBuffer, computeSpendingTotal } from '../useFinance'
 import LoanCard from '../components/finance/LoanCard'
 import DonutChart from '../components/finance/DonutChart'
 import ScenarioCard from '../components/finance/ScenarioCard'
 import MilestoneTimeline from '../components/finance/MilestoneTimeline'
 import UpdateModal from '../components/finance/UpdateModal'
+import CryptoWidget from '../components/finance/CryptoWidget'
+import CategoryDetail from '../components/finance/CategoryDetail'
 
-function formatPLN(n, decimals = 0) {
-  return n.toLocaleString('pl-PL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ' PLN'
+function formatPLN(n) {
+  return n.toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' PLN'
 }
 
 function currentMonthKey() {
@@ -37,10 +39,20 @@ function daysSince(dateStr) {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
 }
 
+// Find the latest month that has bank balance data
+function latestBalances(months) {
+  const keys = Object.keys(months).sort().reverse()
+  for (const k of keys) {
+    if (months[k]?.balances) return months[k].balances
+  }
+  return null
+}
+
 export default function Finance() {
-  const { data, loaded, load } = useFinance()
+  const { data, loaded, load, importMonth } = useFinance()
   const [month, setMonth] = useState(currentMonthKey())
   const [showUpdate, setShowUpdate] = useState(false)
+  const [selectedCat, setSelectedCat] = useState(null) // key of clicked category
 
   useEffect(() => { if (!loaded) load() }, [loaded])
 
@@ -56,12 +68,29 @@ export default function Finance() {
   const buffer = computeBuffer(data.income, data.fixedCosts)
   const monthData = data.months?.[month]
   const spending = monthData?.spending ?? {}
+  const transactions = monthData?.transactions ?? {}
   const spentTotal = computeSpendingTotal(spending)
   const stale = daysSince(data.lastUpdated) > 25
+  const balances = latestBalances(data.months ?? {})
+  const totalBalance = balances ? (balances.mbank ?? 0) + (balances.millennium ?? 0) : null
 
   const donutSegments = Object.entries(CATEGORIES)
-    .map(([key, cat]) => ({ color: cat.color, value: spending[key] ?? 0, label: cat.label }))
+    .map(([key, cat]) => ({ key, color: cat.color, value: spending[key] ?? 0, label: cat.label }))
     .filter(s => s.value > 0)
+
+  async function handleBalanceEdit() {
+    const mbank = window.prompt('mBank balance (PLN):', String(balances?.mbank ?? ''))
+    if (mbank === null) return
+    const millennium = window.prompt('Millennium balance (PLN):', String(balances?.millennium ?? ''))
+    if (millennium === null) return
+    const key = currentMonthKey()
+    await importMonth(key, {
+      balances: {
+        mbank: parseFloat(mbank.replace(/[, ]/g, '')) || 0,
+        millennium: parseFloat(millennium.replace(/[, ]/g, '')) || 0,
+      },
+    })
+  }
 
   return (
     <div className="min-h-screen pb-24 px-4 pt-6 md:px-8" style={{ zIndex: 1 }}>
@@ -72,7 +101,7 @@ export default function Finance() {
           <h1 className="text-white text-2xl font-bold">Finance</h1>
           <div className="flex items-center gap-2">
             {data.lastUpdated && (
-              <span className="text-slate-600 text-xs">Updated {data.lastUpdated}</span>
+              <span className="text-slate-600 text-xs hidden sm:block">Updated {data.lastUpdated}</span>
             )}
             <button
               onClick={() => setShowUpdate(true)}
@@ -88,37 +117,63 @@ export default function Finance() {
         {stale && (
           <div className="mb-5 flex items-center gap-3 bg-amber-400/8 border border-amber-400/20 rounded-2xl px-4 py-3">
             <RefreshCw size={16} className="text-amber-400 shrink-0" />
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="text-amber-300 text-sm font-medium">Time to update your statements</p>
               <p className="text-amber-400/70 text-xs">Last updated {daysSince(data.lastUpdated)} days ago</p>
             </div>
-            <button onClick={() => setShowUpdate(true)} className="ml-auto text-amber-400 text-xs font-medium hover:text-amber-300">
+            <button onClick={() => setShowUpdate(true)} className="text-amber-400 text-xs font-medium hover:text-amber-300 shrink-0">
               Update →
             </button>
           </div>
         )}
 
+        {/* Bank balance row */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mb-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">Bank balances</p>
+            <button onClick={handleBalanceEdit} className="text-slate-600 hover:text-slate-400 transition-colors">
+              <Pencil size={13} />
+            </button>
+          </div>
+          {totalBalance === null ? (
+            <div className="flex items-center gap-3">
+              <p className="text-slate-600 text-sm flex-1">No balance data yet —</p>
+              <button onClick={handleBalanceEdit} className="text-emerald-400 text-xs hover:text-emerald-300">Add →</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <div>
+                <p className="text-slate-500 text-xs">mBank</p>
+                <p className="text-white text-base font-semibold">{formatPLN(balances.mbank ?? 0)}</p>
+              </div>
+              <div className="text-slate-700 text-lg">+</div>
+              <div>
+                <p className="text-slate-500 text-xs">Millennium</p>
+                <p className="text-white text-base font-semibold">{formatPLN(balances.millennium ?? 0)}</p>
+              </div>
+              <div className="ml-auto text-right">
+                <p className="text-slate-500 text-xs">Total</p>
+                <p className="text-emerald-400 text-lg font-bold">{formatPLN(totalBalance)}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Overview strip */}
         <div className="grid grid-cols-3 gap-2 mb-5">
           <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-center">
             <p className="text-slate-500 text-xs mb-1">Salary</p>
-            <p className="text-white text-base font-semibold">
-              {(data.income.monthlySalary / 1000).toFixed(1)}k
-            </p>
+            <p className="text-white text-base font-semibold">{(data.income.monthlySalary / 1000).toFixed(1)}k</p>
             <p className="text-slate-600 text-xs">PLN</p>
           </div>
           <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-center">
             <p className="text-slate-500 text-xs mb-1">Fixed</p>
-            <p className="text-white text-base font-semibold">
-              {(fixedTotal / 1000).toFixed(1)}k
-            </p>
+            <p className="text-white text-base font-semibold">{(fixedTotal / 1000).toFixed(1)}k</p>
             <p className="text-slate-600 text-xs">PLN</p>
           </div>
-          <div className="bg-white/5 border border-emerald-800/30 bg-emerald-950/20 rounded-xl px-3 py-3 text-center">
+          <div className="bg-emerald-950/20 border border-emerald-800/30 rounded-xl px-3 py-3 text-center">
             <p className="text-slate-500 text-xs mb-1">Buffer</p>
-            <p className="text-emerald-400 text-base font-semibold">
-              {(buffer / 1000).toFixed(1)}k
-            </p>
+            <p className="text-emerald-400 text-base font-semibold">{(buffer / 1000).toFixed(1)}k</p>
             <p className="text-slate-600 text-xs">PLN</p>
           </div>
         </div>
@@ -129,12 +184,14 @@ export default function Finance() {
           <LoanCard loan={data.cashLoan} type="cashLoan" />
         </div>
 
+        {/* Crypto widget */}
+        <CryptoWidget usdcBalance={25000} />
+
         {/* Expense wheel */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-5">
-          {/* Month selector */}
           <div className="flex items-center justify-between mb-4">
             <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">Spending</p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <button onClick={() => setMonth(prevMonth(month))} className="text-slate-500 hover:text-slate-300 p-1">
                 <ChevronLeft size={16} />
               </button>
@@ -161,28 +218,36 @@ export default function Finance() {
               <div className="shrink-0">
                 <DonutChart
                   segments={donutSegments}
-                  centerLabel={formatPLN(spentTotal)}
-                  centerSub="spent"
+                  centerLabel={formatPLN(spentTotal).replace(' PLN', '')}
+                  centerSub="PLN spent"
                 />
               </div>
-              <div className="flex-1 w-full space-y-2">
+              <div className="flex-1 w-full space-y-1">
                 {Object.entries(CATEGORIES).map(([key, cat]) => {
                   const val = spending[key] ?? 0
                   const pct = spentTotal > 0 ? Math.round((val / spentTotal) * 100) : 0
+                  const hasDetail = !!(transactions[key]?.length)
                   const overBudget = val > cat.budget
                   return (
-                    <div key={key} className="flex items-center gap-2">
+                    <button
+                      key={key}
+                      onClick={() => setSelectedCat(key)}
+                      className="w-full flex items-center gap-2 py-2 px-2 rounded-xl hover:bg-white/5 transition-colors text-left group"
+                    >
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: cat.color }} />
-                      <span className="text-slate-400 text-xs flex-1 truncate">{cat.label}</span>
-                      <span className={`text-xs font-medium ${overBudget ? 'text-red-400' : 'text-slate-300'}`}>
-                        {val.toLocaleString('pl-PL')}
+                      <span className="text-slate-400 text-xs flex-1 truncate group-hover:text-slate-300">
+                        {cat.label}
+                        {hasDetail && <span className="ml-1 text-slate-600">›</span>}
                       </span>
-                      <span className="text-slate-600 text-xs w-8 text-right">{pct}%</span>
-                    </div>
+                      <span className={`text-xs font-medium ${overBudget ? 'text-red-400' : 'text-slate-300'}`}>
+                        {val > 0 ? val.toLocaleString('pl-PL') : '—'}
+                      </span>
+                      <span className="text-slate-600 text-xs w-8 text-right">{pct > 0 ? `${pct}%` : ''}</span>
+                    </button>
                   )
                 })}
-                <div className="pt-2 border-t border-white/8 flex justify-between items-center">
-                  <span className="text-slate-500 text-xs">vs budget</span>
+                <div className="pt-2 border-t border-white/8 flex justify-between items-center px-2">
+                  <span className="text-slate-500 text-xs">vs budget (2,930)</span>
                   <span className={`text-xs font-semibold ${spentTotal > 2930 ? 'text-red-400' : 'text-emerald-400'}`}>
                     {spentTotal > 2930 ? '+' : ''}{(spentTotal - 2930).toLocaleString('pl-PL')} PLN
                   </span>
@@ -203,6 +268,16 @@ export default function Finance() {
       </div>
 
       {showUpdate && <UpdateModal onClose={() => setShowUpdate(false)} />}
+
+      {selectedCat && (
+        <CategoryDetail
+          catKey={selectedCat}
+          category={CATEGORIES[selectedCat]}
+          spending={spending}
+          transactions={transactions}
+          onClose={() => setSelectedCat(null)}
+        />
+      )}
     </div>
   )
 }

@@ -6,6 +6,7 @@ const EXAMPLE = `{
   "month": "2026-06",
   "income": 11700,
   "freelance": 0,
+  "balances": { "mbank": 5000, "millennium": 3000 },
   "spending": {
     "groceries": 650,
     "dining": 200,
@@ -16,6 +17,13 @@ const EXAMPLE = `{
     "shopping": 350,
     "entertainment": 80,
     "cash": 500
+  },
+  "transactions": {
+    "groceries": [
+      { "name": "Biedronka", "amount": 280, "date": "06-03" },
+      { "name": "Lidl", "amount": 210, "date": "06-10" },
+      { "name": "Żabka", "amount": 160, "date": "06-15" }
+    ]
   },
   "mortgage": { "remainingBalance": 459000, "installmentsPaid": 27 },
   "cashLoan":  { "remainingBalance": 139000, "installmentsPaid": 10 }

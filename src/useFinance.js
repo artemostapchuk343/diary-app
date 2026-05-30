@@ -62,6 +62,7 @@ const INITIAL = {
     '2026-05': {
       income: 11700,
       freelance: 0,
+      // balances: { mbank: 0, millennium: 0 }  ← added when importing statements
       spending: {
         groceries: 700,
         dining: 225,
@@ -73,6 +74,7 @@ const INITIAL = {
         entertainment: 100,
         cash: 600,
       },
+      // transactions: { groceries: [{ name, amount }] }  ← added when importing statements
     },
   },
 }
@@ -94,16 +96,37 @@ export const useFinance = create((set, get) => ({
   importMonth: async (monthKey, patch) => {
     const data = get().data
     const existing = data.months?.[monthKey] ?? {}
+    // spending: support both flat {cat: total} and detailed {cat: {total, items}}
+    // flatten to totals for spending, keep items in transactions
+    const rawSpending = patch.spending ?? {}
+    const spending = {}
+    const transactions = { ...(existing.transactions ?? {}) }
+    for (const [cat, val] of Object.entries(rawSpending)) {
+      if (typeof val === 'number') {
+        spending[cat] = val
+      } else if (val && typeof val === 'object') {
+        spending[cat] = val.total ?? val.items?.reduce((s, i) => s + i.amount, 0) ?? 0
+        if (val.items) transactions[cat] = val.items
+      }
+    }
+    if (patch.transactions) {
+      Object.assign(transactions, patch.transactions)
+    }
+    const monthEntry = {
+      ...existing,
+      income: patch.income ?? existing.income,
+      freelance: patch.freelance ?? existing.freelance,
+      spending: { ...existing.spending, ...spending },
+      ...(Object.keys(transactions).length && { transactions }),
+      ...(patch.balances && { balances: patch.balances }),
+    }
     const updated = {
       ...data,
       lastUpdated: new Date().toISOString().slice(0, 10),
-      months: {
-        ...data.months,
-        [monthKey]: { ...existing, ...patch },
-      },
-      ...(patch.mortgage   && { mortgage:  { ...data.mortgage,  ...patch.mortgage  } }),
-      ...(patch.cashLoan   && { cashLoan:  { ...data.cashLoan,  ...patch.cashLoan  } }),
-      ...(patch.savings    && { savings:   { ...data.savings,   ...patch.savings   } }),
+      months: { ...data.months, [monthKey]: monthEntry },
+      ...(patch.mortgage && { mortgage: { ...data.mortgage, ...patch.mortgage } }),
+      ...(patch.cashLoan && { cashLoan: { ...data.cashLoan, ...patch.cashLoan } }),
+      ...(patch.savings  && { savings:  { ...data.savings,  ...patch.savings  } }),
     }
     await get()._save(updated)
   },
