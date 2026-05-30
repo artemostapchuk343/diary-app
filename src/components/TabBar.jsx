@@ -1,9 +1,10 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, BarChart2 } from 'lucide-react'
+import { BookOpen, BarChart2, Plane } from 'lucide-react'
 
 const TABS = [
   { path: '/',        label: 'Diary',   icon: BookOpen,  match: p => p === '/' || p.startsWith('/entry') },
   { path: '/finance', label: 'Finance', icon: BarChart2, match: p => p.startsWith('/finance') },
+  { path: '/travel',  label: 'Travel',  icon: Plane,     match: p => p.startsWith('/travel') },
 ]
 
 export default function TabBar() {

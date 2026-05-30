@@ -5,6 +5,7 @@ import LockScreen from './pages/LockScreen'
 import EntryList from './pages/EntryList'
 import EntryEditor from './pages/EntryEditor'
 import Finance from './pages/Finance'
+import Travel from './pages/Travel'
 import TabBar from './components/TabBar'
 
 function Guard({ children }) {
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="/" element={<EntryList />} />
             <Route path="/entry/:id" element={<EntryEditor />} />
             <Route path="/finance" element={<Finance />} />
+            <Route path="/travel" element={<Travel />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </Layout>
