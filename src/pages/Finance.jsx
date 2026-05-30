@@ -1,17 +1,14 @@
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Upload, RefreshCw, Pencil } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Upload, RefreshCw } from 'lucide-react'
 import { useFinance, CATEGORIES, computeFixedTotal, computeBuffer, computeSpendingTotal } from '../useFinance'
+import WealthPanel from '../components/finance/WealthPanel'
+import MonthlyBarChart from '../components/finance/MonthlyBarChart'
 import LoanCard from '../components/finance/LoanCard'
 import DonutChart from '../components/finance/DonutChart'
 import ScenarioCard from '../components/finance/ScenarioCard'
 import MilestoneTimeline from '../components/finance/MilestoneTimeline'
 import UpdateModal from '../components/finance/UpdateModal'
-import CryptoWidget from '../components/finance/CryptoWidget'
 import CategoryDetail from '../components/finance/CategoryDetail'
-
-function formatPLN(n) {
-  return n.toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' PLN'
-}
 
 function currentMonthKey() {
   const d = new Date()
@@ -39,7 +36,6 @@ function daysSince(dateStr) {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
 }
 
-// Find the latest month that has bank balance data
 function latestBalances(months) {
   const keys = Object.keys(months).sort().reverse()
   for (const k of keys) {
@@ -52,9 +48,18 @@ export default function Finance() {
   const { data, loaded, load, importMonth } = useFinance()
   const [month, setMonth] = useState(currentMonthKey())
   const [showUpdate, setShowUpdate] = useState(false)
-  const [selectedCat, setSelectedCat] = useState(null) // key of clicked category
+  const [selectedCat, setSelectedCat] = useState(null)
 
   useEffect(() => { if (!loaded) load() }, [loaded])
+
+  // When Finance page first loads, default to most recent month with data
+  useEffect(() => {
+    if (!loaded || !data?.months) return
+    const keys = Object.keys(data.months).sort()
+    if (keys.length && !data.months[month]) {
+      setMonth(keys[keys.length - 1])
+    }
+  }, [loaded])
 
   if (!loaded || !data) {
     return (
@@ -65,16 +70,12 @@ export default function Finance() {
   }
 
   const fixedTotal = computeFixedTotal(data.fixedCosts)
-  const buffer = computeBuffer(data.income, data.fixedCosts)
   const monthData = data.months?.[month]
   const spending = monthData?.spending ?? {}
   const transactions = monthData?.transactions ?? {}
   const spentTotal = computeSpendingTotal(spending)
   const stale = daysSince(data.lastUpdated) > 25
   const balances = latestBalances(data.months ?? {})
-  const totalBalance = balances
-    ? (balances.mbank ?? 0) + (balances.millennium ?? 0)
-    : null
 
   const donutSegments = Object.entries(CATEGORIES)
     .map(([key, cat]) => ({ key, color: cat.color, value: spending[key] ?? 0, label: cat.label }))
@@ -88,7 +89,7 @@ export default function Finance() {
     const key = currentMonthKey()
     await importMonth(key, {
       balances: {
-        mbank: parseFloat(mbank.replace(/[, ]/g, '')) || 0,
+        mbank: parseFloat(mbank.replace(/[, ]/g, '')) || null,
         millennium: parseFloat(millennium.replace(/[, ]/g, '')) || 0,
       },
     })
@@ -102,9 +103,7 @@ export default function Finance() {
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-white text-2xl font-bold">Finance</h1>
           <div className="flex items-center gap-2">
-            {data.lastUpdated && (
-              <span className="text-slate-600 text-xs hidden sm:block">Updated {data.lastUpdated}</span>
-            )}
+            <span className="text-slate-600 text-xs hidden sm:block">Updated {data.lastUpdated}</span>
             <button
               onClick={() => setShowUpdate(true)}
               className="flex items-center gap-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-600/30 text-emerald-400 text-sm font-medium px-3 py-2 rounded-xl transition-colors"
@@ -115,7 +114,7 @@ export default function Finance() {
           </div>
         </div>
 
-        {/* Stale data reminder */}
+        {/* Stale reminder */}
         {stale && (
           <div className="mb-5 flex items-center gap-3 bg-amber-400/8 border border-amber-400/20 rounded-2xl px-4 py-3">
             <RefreshCw size={16} className="text-amber-400 shrink-0" />
@@ -123,73 +122,25 @@ export default function Finance() {
               <p className="text-amber-300 text-sm font-medium">Time to update your statements</p>
               <p className="text-amber-400/70 text-xs">Last updated {daysSince(data.lastUpdated)} days ago</p>
             </div>
-            <button onClick={() => setShowUpdate(true)} className="text-amber-400 text-xs font-medium hover:text-amber-300 shrink-0">
-              Update →
-            </button>
+            <button onClick={() => setShowUpdate(true)} className="text-amber-400 text-xs font-medium hover:text-amber-300 shrink-0">Update →</button>
           </div>
         )}
 
-        {/* Crypto widget — top priority */}
-        <CryptoWidget usdcBalance={25000} />
+        {/* 1 — Wealth panel (bank + crypto + live prices) */}
+        <WealthPanel
+          usdcBalance={25000}
+          balances={balances}
+          onEditBalances={handleBalanceEdit}
+        />
 
-        {/* Bank balance row */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">Bank balances</p>
-            <button onClick={handleBalanceEdit} className="text-slate-600 hover:text-slate-400 transition-colors">
-              <Pencil size={13} />
-            </button>
-          </div>
-          {totalBalance === null ? (
-            <div className="flex items-center gap-3">
-              <p className="text-slate-600 text-sm flex-1">No balance data yet —</p>
-              <button onClick={handleBalanceEdit} className="text-emerald-400 text-xs hover:text-emerald-300">Add →</button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-4">
-              <div>
-                <p className="text-slate-500 text-xs">mBank</p>
-                <p className="text-white text-base font-semibold">{balances.mbank != null ? formatPLN(balances.mbank) : '—'}</p>
-              </div>
-              <div className="text-slate-700 text-lg">+</div>
-              <div>
-                <p className="text-slate-500 text-xs">Millennium</p>
-                <p className="text-white text-base font-semibold">{formatPLN(balances.millennium ?? 0)}</p>
-              </div>
-              <div className="ml-auto text-right">
-                <p className="text-slate-500 text-xs">Total known</p>
-                <p className="text-emerald-400 text-lg font-bold">{formatPLN(totalBalance)}</p>
-              </div>
-            </div>
-          )}
-        </div>
+        {/* 2 — Monthly bar chart */}
+        <MonthlyBarChart
+          months={data.months ?? {}}
+          selectedMonth={month}
+          onSelectMonth={setMonth}
+        />
 
-        {/* Overview strip */}
-        <div className="grid grid-cols-3 gap-2 mb-5">
-          <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-center">
-            <p className="text-slate-500 text-xs mb-1">Salary</p>
-            <p className="text-white text-base font-semibold">{(data.income.monthlySalary / 1000).toFixed(1)}k</p>
-            <p className="text-slate-600 text-xs">PLN</p>
-          </div>
-          <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-center">
-            <p className="text-slate-500 text-xs mb-1">Fixed</p>
-            <p className="text-white text-base font-semibold">{(fixedTotal / 1000).toFixed(1)}k</p>
-            <p className="text-slate-600 text-xs">PLN</p>
-          </div>
-          <div className="bg-emerald-950/20 border border-emerald-800/30 rounded-xl px-3 py-3 text-center">
-            <p className="text-slate-500 text-xs mb-1">Buffer</p>
-            <p className="text-emerald-400 text-base font-semibold">{(buffer / 1000).toFixed(1)}k</p>
-            <p className="text-slate-600 text-xs">PLN</p>
-          </div>
-        </div>
-
-        {/* Loans */}
-        <div className="space-y-3 mb-5">
-          <LoanCard loan={data.mortgage} type="mortgage" />
-          <LoanCard loan={data.cashLoan} type="cashLoan" />
-        </div>
-
-        {/* Expense wheel */}
+        {/* 3 — Spending wheel */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-5">
           <div className="flex items-center justify-between mb-4">
             <p className="text-slate-400 text-xs font-medium uppercase tracking-wide">Spending</p>
@@ -220,7 +171,9 @@ export default function Finance() {
               <div className="shrink-0">
                 <DonutChart
                   segments={donutSegments}
-                  centerLabel={formatPLN(spentTotal).replace(' PLN', '')}
+                  centerLabel={spentTotal >= 1000
+                    ? `${(spentTotal / 1000).toFixed(1)}k`
+                    : String(Math.round(spentTotal))}
                   centerSub="PLN spent"
                 />
               </div>
@@ -259,12 +212,22 @@ export default function Finance() {
           )}
         </div>
 
-        {/* Scenario card */}
+        {/* 4 — Savings & scenario */}
         <div className="mb-5">
           <ScenarioCard />
         </div>
 
-        {/* Timeline */}
+        {/* 5 — Cash loan */}
+        <div className="mb-3">
+          <LoanCard loan={data.cashLoan} type="cashLoan" />
+        </div>
+
+        {/* 6 — Mortgage */}
+        <div className="mb-5">
+          <LoanCard loan={data.mortgage} type="mortgage" />
+        </div>
+
+        {/* 7 — Milestones */}
         <MilestoneTimeline />
 
       </div>
