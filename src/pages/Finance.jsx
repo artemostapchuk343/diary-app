@@ -72,7 +72,9 @@ export default function Finance() {
   const spentTotal = computeSpendingTotal(spending)
   const stale = daysSince(data.lastUpdated) > 25
   const balances = latestBalances(data.months ?? {})
-  const totalBalance = balances ? (balances.mbank ?? 0) + (balances.millennium ?? 0) : null
+  const totalBalance = balances
+    ? (balances.mbank ?? 0) + (balances.millennium ?? 0)
+    : null
 
   const donutSegments = Object.entries(CATEGORIES)
     .map(([key, cat]) => ({ key, color: cat.color, value: spending[key] ?? 0, label: cat.label }))
@@ -127,6 +129,9 @@ export default function Finance() {
           </div>
         )}
 
+        {/* Crypto widget — top priority */}
+        <CryptoWidget usdcBalance={25000} />
+
         {/* Bank balance row */}
         <div className="bg-white/5 border border-white/10 rounded-2xl px-5 py-4 mb-5">
           <div className="flex items-center justify-between mb-3">
@@ -144,7 +149,7 @@ export default function Finance() {
             <div className="flex items-center gap-4">
               <div>
                 <p className="text-slate-500 text-xs">mBank</p>
-                <p className="text-white text-base font-semibold">{formatPLN(balances.mbank ?? 0)}</p>
+                <p className="text-white text-base font-semibold">{balances.mbank != null ? formatPLN(balances.mbank) : '—'}</p>
               </div>
               <div className="text-slate-700 text-lg">+</div>
               <div>
@@ -152,7 +157,7 @@ export default function Finance() {
                 <p className="text-white text-base font-semibold">{formatPLN(balances.millennium ?? 0)}</p>
               </div>
               <div className="ml-auto text-right">
-                <p className="text-slate-500 text-xs">Total</p>
+                <p className="text-slate-500 text-xs">Total known</p>
                 <p className="text-emerald-400 text-lg font-bold">{formatPLN(totalBalance)}</p>
               </div>
             </div>
@@ -183,9 +188,6 @@ export default function Finance() {
           <LoanCard loan={data.mortgage} type="mortgage" />
           <LoanCard loan={data.cashLoan} type="cashLoan" />
         </div>
-
-        {/* Crypto widget */}
-        <CryptoWidget usdcBalance={25000} />
 
         {/* Expense wheel */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-5 mb-5">
