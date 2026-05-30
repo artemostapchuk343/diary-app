@@ -11,9 +11,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
-        name: 'My Diary',
-        short_name: 'Diary',
-        description: 'Personal diary app',
+        name: 'Personal Dashboard',
+        short_name: 'Dashboard',
+        description: 'Personal diary and finance dashboard',
         theme_color: '#1a1a2e',
         background_color: '#1a1a2e',
         display: 'standalone',

@@ -1,9 +1,11 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './useAuth'
 import LockScreen from './pages/LockScreen'
 import EntryList from './pages/EntryList'
 import EntryEditor from './pages/EntryEditor'
+import Finance from './pages/Finance'
+import TabBar from './components/TabBar'
 
 function Guard({ children }) {
   const unlocked = useAuth(s => s.unlocked)
@@ -23,16 +25,30 @@ function Guard({ children }) {
   return unlocked ? children : <LockScreen />
 }
 
+function Layout({ children }) {
+  const { pathname } = useLocation()
+  const hideTab = pathname.startsWith('/entry/')
+  return (
+    <>
+      {children}
+      {!hideTab && <TabBar />}
+    </>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <div className="bg-layer" aria-hidden="true" />
       <Guard>
-        <Routes>
-          <Route path="/" element={<EntryList />} />
-          <Route path="/entry/:id" element={<EntryEditor />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<EntryList />} />
+            <Route path="/entry/:id" element={<EntryEditor />} />
+            <Route path="/finance" element={<Finance />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </Layout>
       </Guard>
     </BrowserRouter>
   )

@@ -360,7 +360,7 @@ export default function EntryList() {
     : entries
 
   return (
-    <div className="min-h-screen py-8 px-4 md:px-8 relative" style={{ zIndex: 1 }}>
+    <div className="min-h-screen py-8 pb-24 px-4 md:px-8 relative" style={{ zIndex: 1 }}>
       {pendingFiles && (
         <ImportModal files={pendingFiles} onConfirm={confirmImport} onCancel={() => setPendingFiles(null)} />
       )}
