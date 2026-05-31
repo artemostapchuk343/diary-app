@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { db } from './db'
+import { isSignedIn, uploadTravelData, downloadTravelData } from './googleDrive'
 
 // Morocco trip — compiled from desktop note + mBank/Millennium statements
 const MOROCCO = {
@@ -10,8 +11,7 @@ const MOROCCO = {
   dates: { from: '2026-05-05', to: '2026-05-12' },
   days: 8,
   totalPLN: 4399,
-  color: '#c87533',   // earthy amber
-  gradient: 'from-amber-900/60 to-orange-950/80',
+  color: '#c87533',
   sections: [
     {
       id: 'flights',
@@ -54,7 +54,7 @@ const MOROCCO = {
       items: [
         { name: 'Food in Tamraght', amount: 91, note: '230 MAD' },
         { name: 'Restau Le Grand Bazar, Marrakech', amount: 72, note: 'mBank 11 May' },
-        { name: 'McDonald\'s (2×, road)', amount: 46, note: 'mBank 11–12 May' },
+        { name: "McDonald's (2×, road)", amount: 46, note: 'mBank 11–12 May' },
         { name: 'Shell, fuel stop', amount: 6 },
       ],
     },
@@ -87,6 +87,13 @@ const MOROCCO = {
 const TRIPS_VERSION = 2
 const INITIAL_TRIPS = [MOROCCO]
 
+async function persist(trips) {
+  const payload = { _v: TRIPS_VERSION, list: trips, _syncedAt: new Date().toISOString() }
+  await db.settings.put({ key: 'trips', value: payload })
+  if (isSignedIn()) uploadTravelData(payload).catch(() => {})
+  return trips
+}
+
 export const useTravelData = create((set, get) => ({
   trips: null,
   loaded: false,
@@ -94,25 +101,49 @@ export const useTravelData = create((set, get) => ({
   load: async () => {
     const row = await db.settings.get('trips')
     const stored = row?.value
-    // Re-seed when no data or version is outdated
+
+    // Re-seed if version is outdated
+    let local
     if (!stored || !stored._v || stored._v < TRIPS_VERSION) {
-      const data = { _v: TRIPS_VERSION, list: INITIAL_TRIPS }
-      await db.settings.put({ key: 'trips', value: data })
-      set({ trips: INITIAL_TRIPS, loaded: true })
-      return
+      local = { _v: TRIPS_VERSION, list: INITIAL_TRIPS, _syncedAt: new Date().toISOString() }
+      await db.settings.put({ key: 'trips', value: local })
+    } else {
+      local = stored
     }
-    set({ trips: stored.list ?? INITIAL_TRIPS, loaded: true })
+
+    set({ trips: local.list ?? INITIAL_TRIPS, loaded: true })
+
+    // Drive sync in background
+    if (!isSignedIn()) return
+    try {
+      const driveData = await downloadTravelData()
+      const currentStored = (await db.settings.get('trips'))?.value ?? local
+      if (!driveData) {
+        uploadTravelData(currentStored).catch(() => {})
+        return
+      }
+      const localTs = currentStored._syncedAt ? new Date(currentStored._syncedAt).getTime() : 0
+      const driveTs = driveData._syncedAt ? new Date(driveData._syncedAt).getTime() : 0
+      if (driveTs > localTs && driveData._v >= TRIPS_VERSION) {
+        await db.settings.put({ key: 'trips', value: driveData })
+        set({ trips: driveData.list ?? INITIAL_TRIPS })
+      } else if (localTs > driveTs) {
+        uploadTravelData(currentStored).catch(() => {})
+      }
+    } catch (e) {
+      console.error('Travel Drive sync failed:', e)
+    }
   },
 
   addTrip: async (trip) => {
     const trips = [...(get().trips ?? []), trip]
-    await db.settings.put({ key: 'trips', value: { _v: TRIPS_VERSION, list: trips } })
+    await persist(trips)
     set({ trips })
   },
 
   updateTrip: async (id, patch) => {
     const trips = (get().trips ?? []).map(t => t.id === id ? { ...t, ...patch } : t)
-    await db.settings.put({ key: 'trips', value: { _v: TRIPS_VERSION, list: trips } })
+    await persist(trips)
     set({ trips })
   },
 }))

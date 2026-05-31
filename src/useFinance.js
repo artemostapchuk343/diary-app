@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { db } from './db'
+import { isSignedIn, uploadFinanceData, downloadFinanceData } from './googleDrive'
 
 export const CATEGORIES = {
   groceries:     { label: 'Groceries',       color: '#4ade80', budget: 700 },
@@ -289,18 +290,40 @@ export const useFinance = create((set, get) => ({
 
   load: async () => {
     const row = await db.settings.get('finance')
-    // Re-seed if no data or version is outdated (real statement data added in v2)
     const stored = row?.value
-    const data = (stored && stored.version >= INITIAL.version) ? stored : INITIAL
+    const local = (stored && stored.version >= INITIAL.version) ? stored : INITIAL
     if (!stored || stored.version < INITIAL.version) {
-      await db.settings.put({ key: 'finance', value: data })
+      await db.settings.put({ key: 'finance', value: local })
     }
-    set({ data, loaded: true })
+    set({ data: local, loaded: true })
+
+    // Drive sync in background — don't block the UI
+    if (!isSignedIn()) return
+    try {
+      const driveData = await downloadFinanceData()
+      const current = get().data
+      if (!driveData) {
+        uploadFinanceData(current).catch(() => {})
+        return
+      }
+      const localTs = current._syncedAt ? new Date(current._syncedAt).getTime() : 0
+      const driveTs = driveData._syncedAt ? new Date(driveData._syncedAt).getTime() : 0
+      if (driveTs > localTs) {
+        await db.settings.put({ key: 'finance', value: driveData })
+        set({ data: driveData })
+      } else if (localTs > driveTs) {
+        uploadFinanceData(current).catch(() => {})
+      }
+    } catch (e) {
+      console.error('Finance Drive sync failed:', e)
+    }
   },
 
   _save: async (data) => {
-    await db.settings.put({ key: 'finance', value: data })
-    set({ data })
+    const stamped = { ...data, _syncedAt: new Date().toISOString() }
+    await db.settings.put({ key: 'finance', value: stamped })
+    set({ data: stamped })
+    if (isSignedIn()) uploadFinanceData(stamped).catch(() => {})
   },
 
   importMonth: async (monthKey, patch) => {

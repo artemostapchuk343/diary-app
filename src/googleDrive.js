@@ -34,7 +34,11 @@ function clearFolderCache() {
   Object.keys(monthFolderCache).forEach(k => delete monthFolderCache[k])
   Object.keys(dayFolderCache).forEach(k => delete dayFolderCache[k])
   Object.keys(folderPromises).forEach(k => delete folderPromises[k])
+  Object.keys(_configFileIds).forEach(k => delete _configFileIds[k])
 }
+
+// Session cache for config file IDs (finance.json, trips.json, etc.)
+const _configFileIds = {}
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -760,4 +764,66 @@ export async function sync(localEntries, { onProgress, onNewEntry, onUpdateEntry
   })
 
   return { uploaded, downloaded }
+}
+
+// ─── Generic config JSON sync (finance, travel, etc.) ────────────────────────
+
+async function getConfigFileId(filename) {
+  if (_configFileIds[filename]) return _configFileIds[filename]
+  const configId = await getConfigFolder()
+  const resp = await api(
+    `/files?q=name='${filename}' and '${configId}' in parents and trashed=false&fields=files(id)&pageSize=1`
+  )
+  const { files } = await resp.json()
+  _configFileIds[filename] = files?.[0]?.id || null
+  return _configFileIds[filename]
+}
+
+async function pushConfigJson(filename, data) {
+  const configId = await getConfigFolder()
+  const existingId = await getConfigFileId(filename)
+  const metadata = {
+    name: filename,
+    mimeType: 'application/json',
+    ...(!existingId && { parents: [configId] }),
+  }
+  const form = new FormData()
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+  form.append('file', new Blob([JSON.stringify(data)], { type: 'application/json' }))
+  const url = existingId
+    ? `/files/${existingId}?uploadType=multipart`
+    : '/files?uploadType=multipart'
+  const resp = await uploadApi(url, { method: existingId ? 'PATCH' : 'POST', body: form })
+  if (!existingId) {
+    const json = await resp.json()
+    _configFileIds[filename] = json.id
+  }
+}
+
+async function pullConfigJson(filename) {
+  const fileId = await getConfigFileId(filename)
+  if (!fileId) return null
+  const resp = await api(`/files/${fileId}?alt=media`)
+  if (!resp.ok) return null
+  return resp.json()
+}
+
+export async function uploadFinanceData(data) {
+  if (!accessToken) return
+  try { await pushConfigJson('finance.json', data) } catch (e) { console.error('uploadFinanceData:', e) }
+}
+
+export async function downloadFinanceData() {
+  if (!accessToken) return null
+  try { return await pullConfigJson('finance.json') } catch { return null }
+}
+
+export async function uploadTravelData(data) {
+  if (!accessToken) return
+  try { await pushConfigJson('trips.json', data) } catch (e) { console.error('uploadTravelData:', e) }
+}
+
+export async function downloadTravelData() {
+  if (!accessToken) return null
+  try { return await pullConfigJson('trips.json') } catch { return null }
 }
