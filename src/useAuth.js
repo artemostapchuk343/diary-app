@@ -1,8 +1,17 @@
 import { create } from 'zustand'
 import { hasPassword, loadPasswordConfig } from './crypto'
 
-const TODAY_KEY = 'diary_unlocked_date'
-const HIDDEN_AT_KEY = 'diary_hidden_at'
+// One-time migration: diary_unlocked_date → dashboard_unlocked_date
+;(function () {
+  const old = localStorage.getItem('diary_unlocked_date')
+  if (old !== null && localStorage.getItem('dashboard_unlocked_date') === null) {
+    localStorage.setItem('dashboard_unlocked_date', old)
+    localStorage.removeItem('diary_unlocked_date')
+  }
+})()
+
+const TODAY_KEY = 'dashboard_unlocked_date'
+const HIDDEN_AT_KEY = 'dashboard_hidden_at'
 const AUTO_LOCK_MS = 2 * 60 * 60 * 1000
 
 function isUnlockedToday() {
@@ -57,9 +66,9 @@ export const useAuth = create((set) => ({
   },
 
   restoreFromDrive: async () => {
-    localStorage.removeItem('diary_verify')
-    localStorage.removeItem('diary_salt')
-    localStorage.removeItem('diary_unlocked_date')
+    localStorage.removeItem('dashboard_verify')
+    localStorage.removeItem('dashboard_salt')
+    localStorage.removeItem('dashboard_unlocked_date')
     set({ initializing: true, unlocked: false })
     try {
       const { silentSignIn, downloadPasswordConfig, signIn } = await import('./googleDrive')

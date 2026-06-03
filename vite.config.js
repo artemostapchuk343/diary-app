@@ -13,7 +13,7 @@ export default defineConfig({
       manifest: {
         name: 'Personal Dashboard',
         short_name: 'Dashboard',
-        description: 'Personal diary and finance dashboard',
+        description: 'Personal journal, finance, and travel dashboard',
         theme_color: '#1a1a2e',
         background_color: '#1a1a2e',
         display: 'standalone',

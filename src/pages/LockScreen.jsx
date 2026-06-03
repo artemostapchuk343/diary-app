@@ -43,9 +43,9 @@ export default function LockScreen() {
           <div className="mb-5">
             <ProfilePic size="lg" />
           </div>
-          <h1 className="text-3xl font-semibold text-white">My Diary</h1>
+          <h1 className="text-3xl font-semibold text-white">My Dashboard</h1>
           <p className="text-slate-400 text-base mt-2">
-            {isNew ? 'Set a password to protect your diary' : 'Enter your password to continue'}
+            {isNew ? 'Set a password to protect your dashboard' : 'Enter your password to continue'}
           </p>
         </div>
 

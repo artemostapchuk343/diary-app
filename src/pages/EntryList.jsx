@@ -283,7 +283,7 @@ export default function EntryList() {
   const [importing, setImporting] = useState(false)
   const [pendingFiles, setPendingFiles] = useState(null)
   const [viewMode, setViewMode] = useState(() => {
-    const saved = localStorage.getItem('diary_view')
+    const saved = localStorage.getItem('dashboard_view') ?? localStorage.getItem('diary_view')
     // migrate away from old 'calendar' value
     return (saved === 'calendar' || !saved) ? 'normal' : saved
   })
@@ -318,7 +318,7 @@ export default function EntryList() {
 
   function setView(mode) {
     setViewMode(mode)
-    localStorage.setItem('diary_view', mode)
+    localStorage.setItem('dashboard_view', mode)
   }
 
   function handleFileSelect(e) {
@@ -370,7 +370,7 @@ export default function EntryList() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <ProfilePic size="sm" editable />
-            <h1 className="text-2xl font-semibold text-white">My Diary</h1>
+            <h1 className="text-2xl font-semibold text-white">My Dashboard</h1>
           </div>
           <div className="flex items-center gap-2">
             <button

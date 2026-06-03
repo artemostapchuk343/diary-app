@@ -1,4 +1,13 @@
-const SALT_KEY = 'diary_salt'
+// One-time migration from diary_ namespace to dashboard_
+;['salt', 'verify'].forEach(k => {
+  const old = localStorage.getItem(`diary_${k}`)
+  if (old !== null && localStorage.getItem(`dashboard_${k}`) === null) {
+    localStorage.setItem(`dashboard_${k}`, old)
+    localStorage.removeItem(`diary_${k}`)
+  }
+})
+
+const SALT_KEY = 'dashboard_salt'
 const IV_LENGTH = 12
 
 function getSalt() {
@@ -46,7 +55,7 @@ export async function decrypt(data, password) {
 }
 
 export async function verifyPassword(password) {
-  const stored = localStorage.getItem('diary_verify')
+  const stored = localStorage.getItem('dashboard_verify')
   if (!stored) return true
   try {
     const result = await decrypt(stored, password)
@@ -58,21 +67,21 @@ export async function verifyPassword(password) {
 
 export async function savePasswordVerifier(password) {
   const token = await encrypt('ok', password)
-  localStorage.setItem('diary_verify', token)
+  localStorage.setItem('dashboard_verify', token)
 }
 
 export function hasPassword() {
-  return !!localStorage.getItem('diary_verify')
+  return !!localStorage.getItem('dashboard_verify')
 }
 
 export function getPasswordConfig() {
   return {
     salt: localStorage.getItem(SALT_KEY),
-    verify: localStorage.getItem('diary_verify'),
+    verify: localStorage.getItem('dashboard_verify'),
   }
 }
 
 export function loadPasswordConfig({ salt, verify }) {
   if (salt) localStorage.setItem(SALT_KEY, salt)
-  if (verify) localStorage.setItem('diary_verify', verify)
+  if (verify) localStorage.setItem('dashboard_verify', verify)
 }

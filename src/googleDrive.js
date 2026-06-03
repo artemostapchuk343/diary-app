@@ -1,7 +1,7 @@
-const FOLDER_NAME = 'My Diary'
+const FOLDER_NAME = 'Personal Dashboard'
 const CONFIG_FOLDER_NAME = '_config'
-const PASSWORD_FILE_NAME = '.diary-password'
-const DELETED_FILE_NAME = '.diary-deleted'
+const PASSWORD_FILE_NAME = '.dashboard-password'
+const DELETED_FILE_NAME = '.dashboard-deleted'
 const PROFILE_PIC_FILE_NAME = 'profile_pic.jpg'
 const SCOPE = 'https://www.googleapis.com/auth/drive.file'
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
