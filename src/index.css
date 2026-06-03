@@ -28,17 +28,19 @@ body {
   content: '';
   display: block;
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
+  /* extend past viewport so blur doesn't clip at edges */
+  top: -4px;
+  left: -4px;
+  width: calc(100vw + 8px);
+  height: calc(100vh + 8px);
   background:
     radial-gradient(ellipse 162% 86% at 0% 100%, #134525 0%, transparent 70%),
     radial-gradient(ellipse 145% 100% at 110% -6%, #225234 0%, transparent 62%),
     #0e1310;
+  filter: blur(1.5px);
 }
 
-/* Noise grain — breaks up gradient banding on low-bit displays */
+/* Noise grain — breaks up any remaining gradient banding */
 .bg-layer::before {
   content: '';
   display: block;
@@ -47,7 +49,7 @@ body {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 256px 256px;
-  opacity: 0.035;
+  opacity: 0.07;
 }
