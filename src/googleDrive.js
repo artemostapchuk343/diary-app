@@ -477,19 +477,21 @@ export async function migrateOldDriveFolder() {
     )
     const { files: [oldConfig] = [] } = await oldConfigResp.json()
 
-    // Move all files from old _config → new _config
+    // Move all files from old _config → new _config, renaming legacy filenames
+    const RENAMES = { '.diary-password': '.dashboard-password', '.diary-deleted': '.dashboard-deleted' }
     if (oldConfig) {
       const filesResp = await api(
-        `/files?q='${oldConfig.id}' in parents and trashed=false&fields=files(id)&pageSize=100`
+        `/files?q='${oldConfig.id}' in parents and trashed=false&fields=files(id,name)&pageSize=100`
       )
       const { files: configFiles = [] } = await filesResp.json()
-      await Promise.all(configFiles.map(f =>
-        api(`/files/${f.id}?addParents=${newConfigId}&removeParents=${oldConfig.id}`, {
+      await Promise.all(configFiles.map(f => {
+        const rename = RENAMES[f.name]
+        return api(`/files/${f.id}?addParents=${newConfigId}&removeParents=${oldConfig.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify(rename ? { name: rename } : {}),
         })
-      ))
+      }))
     }
 
     // Trash the old root folder (recursively trashes any remaining entries inside)
@@ -602,6 +604,7 @@ export async function restoreAndUpload(entry) {
 export async function downloadPasswordConfig() {
   try {
     const fileId = await findOrMigrateConfigFile(PASSWORD_FILE_NAME)
+      || await findOrMigrateConfigFile('.diary-password')
     if (!fileId) return null
     const content = await downloadFile(fileId)
     return JSON.parse(content)

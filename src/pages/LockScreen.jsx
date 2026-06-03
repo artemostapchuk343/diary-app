@@ -3,7 +3,7 @@ import { Eye, EyeOff, Cloud } from 'lucide-react'
 import ProfilePic from '../components/ProfilePic'
 import { verifyPassword, savePasswordVerifier, hasPassword, getPasswordConfig } from '../crypto'
 import { useAuth } from '../useAuth'
-import { isConfigured, signIn as driveSignIn } from '../googleDrive'
+import { signIn as driveSignIn } from '../googleDrive'
 
 export default function LockScreen() {
   const [password, setPassword] = useState('')
@@ -49,7 +49,7 @@ export default function LockScreen() {
           </p>
         </div>
 
-        {isNew && isConfigured() && (
+        {isNew && (
           <div className="mb-6">
             <button
               type="button"
@@ -106,7 +106,7 @@ export default function LockScreen() {
           </button>
         </form>
 
-        {isConfigured() && (
+        {!isNew && (
           <button
             type="button"
             onClick={restoreFromDrive}
