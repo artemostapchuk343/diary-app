@@ -30,7 +30,7 @@
   </g>
 
   <!-- Ring -->
-  <circle cx="50" cy="50" r="36" fill="none" stroke="#e8f4ec" stroke-width="2.2" opacity="0.55"/>
+  <circle cx="50" cy="50" r="36" fill="none" stroke="#e8f4ec" stroke-width="3.5" opacity="0.55"/>
 
   <!-- Diagonal ticks -->
   <line x1="73.8" y1="25.0" x2="76.9" y2="22.1" stroke="#e8f4ec" stroke-width="1.8" opacity="0.5" stroke-linecap="round"/>
