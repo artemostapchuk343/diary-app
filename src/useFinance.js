@@ -323,7 +323,10 @@ export const useFinance = create((set, get) => ({
     const stamped = { ...data, _syncedAt: new Date().toISOString() }
     await db.settings.put({ key: 'finance', value: stamped })
     set({ data: stamped })
-    if (isSignedIn()) uploadFinanceData(stamped).catch(() => {})
+    if (isSignedIn()) {
+      try { await uploadFinanceData(stamped) }
+      catch (e) { console.error('Finance Drive upload failed:', e) }
+    }
   },
 
   importMonth: async (monthKey, patch) => {

@@ -810,7 +810,7 @@ async function pullConfigJson(filename) {
 
 export async function uploadFinanceData(data) {
   if (!accessToken) return
-  try { await pushConfigJson('finance.json', data) } catch (e) { console.error('uploadFinanceData:', e) }
+  await pushConfigJson('finance.json', data)
 }
 
 export async function downloadFinanceData() {
@@ -820,7 +820,7 @@ export async function downloadFinanceData() {
 
 export async function uploadTravelData(data) {
   if (!accessToken) return
-  try { await pushConfigJson('trips.json', data) } catch (e) { console.error('uploadTravelData:', e) }
+  await pushConfigJson('trips.json', data)
 }
 
 export async function downloadTravelData() {

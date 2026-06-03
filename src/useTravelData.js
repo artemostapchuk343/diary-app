@@ -90,7 +90,10 @@ const INITIAL_TRIPS = [MOROCCO]
 async function persist(trips) {
   const payload = { _v: TRIPS_VERSION, list: trips, _syncedAt: new Date().toISOString() }
   await db.settings.put({ key: 'trips', value: payload })
-  if (isSignedIn()) uploadTravelData(payload).catch(() => {})
+  if (isSignedIn()) {
+    try { await uploadTravelData(payload) }
+    catch (e) { console.error('Travel Drive upload failed:', e) }
+  }
   return trips
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, MapPin, Calendar, Wallet, Pencil, Plus, Trash2, Check, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, MapPin, Calendar, Wallet, Pencil, Plus, Trash2, Check, X, Loader2 } from 'lucide-react'
 import { useTravelData } from '../useTravelData'
 
 function fmtPLN(n) {
@@ -117,6 +117,7 @@ function TripCard({ trip, onSave }) {
   const [open, setOpen] = useState(true)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(null)
+  const [saving, setSaving] = useState(false)
 
   function startEdit() {
     setDraft(JSON.parse(JSON.stringify(trip)))
@@ -129,12 +130,17 @@ function TripCard({ trip, onSave }) {
     setEditing(false)
   }
 
-  function saveEdit() {
-    const sections = calcTotals(draft.sections)
-    const totalPLN = totalFromSections(sections)
-    onSave({ ...draft, sections, totalPLN })
-    setDraft(null)
-    setEditing(false)
+  async function saveEdit() {
+    setSaving(true)
+    try {
+      const sections = calcTotals(draft.sections)
+      const totalPLN = totalFromSections(sections)
+      await onSave({ ...draft, sections, totalPLN })
+      setDraft(null)
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   function setDraftField(field, value) {
@@ -251,9 +257,13 @@ function TripCard({ trip, onSave }) {
               </button>
               <button
                 onClick={saveEdit}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-xl py-2.5 transition-colors"
+                disabled={saving}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-medium rounded-xl py-2.5 transition-colors"
               >
-                <Check size={14} /> Save
+                {saving
+                  ? <><Loader2 size={14} className="animate-spin" /> Saving…</>
+                  : <><Check size={14} /> Save</>
+                }
               </button>
             </div>
           </div>
