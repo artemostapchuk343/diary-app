@@ -5,7 +5,7 @@
 }
 
 html {
-  background: #0e1310;
+  background: #070c08;
 }
 
 body {
@@ -33,7 +33,7 @@ body {
   width: 100vw;
   height: 100vh;
   background:
-    radial-gradient(ellipse 162% 86% at 0% 100%, #134525 0%, transparent 70%),
-    radial-gradient(ellipse 145% 100% at 110% -6%, #225234 0%, transparent 62%),
-    #0e1310;
+    radial-gradient(ellipse 162% 86% at 0% 100%, #0d2b18 0%, transparent 70%),
+    radial-gradient(ellipse 145% 100% at 110% -6%, #132b1c 0%, transparent 62%),
+    #070c08;
 }

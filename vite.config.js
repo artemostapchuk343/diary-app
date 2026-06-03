@@ -14,8 +14,8 @@ export default defineConfig({
         name: 'Personal Dashboard',
         short_name: 'Dashboard',
         description: 'Personal journal, finance, and travel dashboard',
-        theme_color: '#1a1a2e',
-        background_color: '#1a1a2e',
+        theme_color: '#070c08',
+        background_color: '#070c08',
         display: 'standalone',
         icons: [
           { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
