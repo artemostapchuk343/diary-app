@@ -6,7 +6,6 @@
 
 html {
   background: #0e1310;
-  overflow-x: hidden;
 }
 
 body {
@@ -15,7 +14,6 @@ body {
   background: transparent;
   color: #e2e8f0;
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
 }
 
 .bg-layer {
@@ -30,16 +28,16 @@ body {
   content: '';
   display: block;
   position: absolute;
-  /* extend past viewport so blur doesn't clip at edges */
-  top: -12px;
-  left: -12px;
-  width: calc(100vw + 24px);
-  height: calc(100vh + 24px);
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
   background:
     radial-gradient(ellipse 162% 86% at 0% 100%, #134525 0%, transparent 70%),
     radial-gradient(ellipse 145% 100% at 110% -6%, #225234 0%, transparent 62%),
     #0e1310;
   filter: blur(6px);
+  clip-path: inset(0);
 }
 
 /* Noise grain — breaks up any remaining gradient banding */
