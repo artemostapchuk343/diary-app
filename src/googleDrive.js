@@ -12,6 +12,7 @@ const REFRESH_TOKEN_KEY = 'gdrive_refresh_token'
 const VERIFIER_KEY = 'gdrive_pkce_verifier'
 const ROOT_FOLDER_KEY = 'gdrive_root_folder_id'
 const CONFIG_FOLDER_KEY = 'gdrive_config_folder_id'
+const MIGRATION_KEY = 'gdrive_old_folder_migrated'
 
 const SYNC_BATCH = 6 // max parallel entry operations
 
@@ -432,6 +433,7 @@ async function findOrMigrateConfigFile(name) {
   let { files } = await resp.json()
   if (files?.length) return files[0].id
 
+  // Fallback: file landed in root instead of _config — move it
   const rootId = await getRootFolder()
   resp = await api(
     `/files?q=name='${name}' and '${rootId}' in parents and trashed=false&fields=files(id)&pageSize=1`
@@ -448,45 +450,56 @@ async function findOrMigrateConfigFile(name) {
     return files[0].id
   }
 
-  // Migration: look in old 'My Diary' folder (project rename)
+  return null
+}
+
+// One-time migration: moves config files from the old 'My Diary' Drive folder
+// to 'Personal Dashboard/_config/', then trashes the old folder.
+// Safe to call after sync (which downloads Drive→local first).
+export async function migrateOldDriveFolder() {
+  if (localStorage.getItem(MIGRATION_KEY) || !accessToken) return
+
   try {
-    const oldRoot = await api(
+    const oldRootResp = await api(
       `/files?q=name='My Diary' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)&pageSize=1`
     )
-    const { files: oldRootFiles } = await oldRoot.json()
-    const oldRootId = oldRootFiles?.[0]?.id
-    if (oldRootId) {
-      const oldConfig = await api(
-        `/files?q=name='_config' and '${oldRootId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)&pageSize=1`
-      )
-      const { files: oldConfigFolders } = await oldConfig.json()
-      const oldConfigId = oldConfigFolders?.[0]?.id
-
-      let oldFileId = null
-      if (oldConfigId) {
-        const r = await api(`/files?q=name='${name}' and '${oldConfigId}' in parents and trashed=false&fields=files(id)&pageSize=1`)
-        const { files: f } = await r.json()
-        oldFileId = f?.[0]?.id
-      }
-      if (!oldFileId) {
-        const r = await api(`/files?q=name='${name}' and '${oldRootId}' in parents and trashed=false&fields=files(id)&pageSize=1`)
-        const { files: f } = await r.json()
-        oldFileId = f?.[0]?.id
-      }
-
-      if (oldFileId) {
-        const copy = await api(`/files/${oldFileId}/copy`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, parents: [configId] }),
-        })
-        const { id } = await copy.json()
-        if (id) return id
-      }
+    const { files: [oldRoot] = [] } = await oldRootResp.json()
+    if (!oldRoot) {
+      localStorage.setItem(MIGRATION_KEY, '1')
+      return
     }
-  } catch {}
 
-  return null
+    const newConfigId = await getConfigFolder()
+
+    // Find old _config subfolder
+    const oldConfigResp = await api(
+      `/files?q=name='_config' and '${oldRoot.id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)&pageSize=1`
+    )
+    const { files: [oldConfig] = [] } = await oldConfigResp.json()
+
+    // Move all files from old _config → new _config
+    if (oldConfig) {
+      const filesResp = await api(
+        `/files?q='${oldConfig.id}' in parents and trashed=false&fields=files(id)&pageSize=100`
+      )
+      const { files: configFiles = [] } = await filesResp.json()
+      await Promise.all(configFiles.map(f =>
+        api(`/files/${f.id}?addParents=${newConfigId}&removeParents=${oldConfig.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+      ))
+    }
+
+    // Trash the old root folder (recursively trashes any remaining entries inside)
+    await api(`/files/${oldRoot.id}`, { method: 'DELETE' })
+
+    localStorage.setItem(MIGRATION_KEY, '1')
+    clearFolderCache()
+  } catch (e) {
+    console.error('Old folder migration failed:', e)
+  }
 }
 
 async function getDeletedIds() {

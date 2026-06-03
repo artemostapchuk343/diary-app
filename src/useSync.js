@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { isSignedIn, silentSignIn, sync, downloadProfilePic } from './googleDrive'
+import { isSignedIn, silentSignIn, sync, downloadProfilePic, migrateOldDriveFolder } from './googleDrive'
 import { db } from './db'
 
 const MIN_INTERVAL_MS = 30_000
@@ -79,6 +79,9 @@ export const useSync = create((set, get) => ({
           await db.entries.delete(Number(id))
         },
       })
+
+      // One-time migration from old 'My Diary' Drive folder
+      migrateOldDriveFolder().catch(() => {})
 
       // Sync profile picture from Drive
       downloadProfilePic().then(async dataUrl => {
