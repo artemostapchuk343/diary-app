@@ -448,6 +448,44 @@ async function findOrMigrateConfigFile(name) {
     return files[0].id
   }
 
+  // Migration: look in old 'My Diary' folder (project rename)
+  try {
+    const oldRoot = await api(
+      `/files?q=name='My Diary' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)&pageSize=1`
+    )
+    const { files: oldRootFiles } = await oldRoot.json()
+    const oldRootId = oldRootFiles?.[0]?.id
+    if (oldRootId) {
+      const oldConfig = await api(
+        `/files?q=name='_config' and '${oldRootId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id)&pageSize=1`
+      )
+      const { files: oldConfigFolders } = await oldConfig.json()
+      const oldConfigId = oldConfigFolders?.[0]?.id
+
+      let oldFileId = null
+      if (oldConfigId) {
+        const r = await api(`/files?q=name='${name}' and '${oldConfigId}' in parents and trashed=false&fields=files(id)&pageSize=1`)
+        const { files: f } = await r.json()
+        oldFileId = f?.[0]?.id
+      }
+      if (!oldFileId) {
+        const r = await api(`/files?q=name='${name}' and '${oldRootId}' in parents and trashed=false&fields=files(id)&pageSize=1`)
+        const { files: f } = await r.json()
+        oldFileId = f?.[0]?.id
+      }
+
+      if (oldFileId) {
+        const copy = await api(`/files/${oldFileId}/copy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, parents: [configId] }),
+        })
+        const { id } = await copy.json()
+        if (id) return id
+      }
+    }
+  } catch {}
+
   return null
 }
 
