@@ -29,15 +29,15 @@ body {
   display: block;
   position: absolute;
   /* extend past viewport so blur doesn't clip at edges */
-  top: -4px;
-  left: -4px;
-  width: calc(100vw + 8px);
-  height: calc(100vh + 8px);
+  top: -12px;
+  left: -12px;
+  width: calc(100vw + 24px);
+  height: calc(100vh + 24px);
   background:
     radial-gradient(ellipse 162% 86% at 0% 100%, #134525 0%, transparent 70%),
     radial-gradient(ellipse 145% 100% at 110% -6%, #225234 0%, transparent 62%),
     #0e1310;
-  filter: blur(1.5px);
+  filter: blur(6px);
 }
 
 /* Noise grain — breaks up any remaining gradient banding */
