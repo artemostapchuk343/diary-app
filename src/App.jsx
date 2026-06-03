@@ -40,7 +40,7 @@ function Layout({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="bg-layer" aria-hidden="true" />
+      <div className="fixed inset-0 -z-10" style={{ background: 'radial-gradient(ellipse 162% 86% at 0% 100%, #134525 0%, transparent 70%), radial-gradient(ellipse 145% 100% at 110% -6%, #225234 0%, transparent 62%), #0e1310' }} />
       <Guard>
         <Layout>
           <Routes>
