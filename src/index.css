@@ -33,25 +33,21 @@ body {
   width: 100vw;
   height: 100vh;
   background:
-    radial-gradient(ellipse 162% 86% at 0% 100%,
-      rgba(19,69,37,1)   0%,
-      rgba(19,69,37,.85) 12%,
-      rgba(19,69,37,.65) 25%,
-      rgba(19,69,37,.44) 38%,
-      rgba(19,69,37,.27) 50%,
-      rgba(19,69,37,.13) 60%,
-      rgba(19,69,37,.04) 67%,
-      rgba(19,69,37,0)   70%
-    ),
-    radial-gradient(ellipse 145% 100% at 110% -6%,
-      rgba(34,82,52,1)   0%,
-      rgba(34,82,52,.85) 10%,
-      rgba(34,82,52,.65) 22%,
-      rgba(34,82,52,.44) 34%,
-      rgba(34,82,52,.27) 46%,
-      rgba(34,82,52,.13) 55%,
-      rgba(34,82,52,.04) 60%,
-      rgba(34,82,52,0)   62%
-    ),
+    radial-gradient(ellipse 162% 86% at 0% 100%, #134525 0%, transparent 70%),
+    radial-gradient(ellipse 145% 100% at 110% -6%, #225234 0%, transparent 62%),
     #0e1310;
+}
+
+/* Noise grain — breaks up gradient banding on low-bit displays */
+.bg-layer::before {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+  opacity: 0.035;
 }
