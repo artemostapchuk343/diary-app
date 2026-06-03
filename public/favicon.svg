@@ -1,28 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <defs>
-    <linearGradient id="grad" gradientUnits="userSpaceOnUse" x1="18" y1="82" x2="82" y2="18">
-      <stop offset="0%" stop-color="#b0dcc4"/>
-      <stop offset="100%" stop-color="#e8f6ee"/>
-    </linearGradient>
-    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="20"/>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="14"/>
     </filter>
     <clipPath id="clip">
       <rect width="100" height="100" rx="22"/>
     </clipPath>
   </defs>
 
-  <rect width="100" height="100" rx="22" fill="#0f1a11"/>
+  <!-- Background -->
+  <rect width="100" height="100" rx="22" fill="#0e1310"/>
+
+  <!-- Subtle background glow -->
   <g clip-path="url(#clip)">
-    <circle cx="8"  cy="96" r="56" fill="#1f6035" opacity="0.85" filter="url(#blur)"/>
-    <circle cx="92" cy="8"  r="48" fill="#254d3a" opacity="0.65" filter="url(#blur)"/>
+    <ellipse cx="-2" cy="102" rx="72" ry="60" fill="#134525" opacity="0.8" filter="url(#glow)"/>
+    <ellipse cx="106" cy="-2" rx="60" ry="60" fill="#225234" opacity="0.6" filter="url(#glow)"/>
   </g>
 
-  <rect x="18" y="16" width="58" height="68" rx="5" fill="url(#grad)" opacity="0.12"/>
-  <rect x="18" y="16" width="58" height="68" rx="5" fill="none" stroke="url(#grad)" stroke-width="3"/>
-  <line x1="33" y1="16" x2="33" y2="84" stroke="url(#grad)" stroke-width="4.5" stroke-linecap="round"/>
-  <line x1="43" y1="35" x2="67" y2="35" stroke="url(#grad)" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
-  <line x1="43" y1="47" x2="67" y2="47" stroke="url(#grad)" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
-  <line x1="43" y1="59" x2="67" y2="59" stroke="url(#grad)" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
-  <path d="M62 16 L62 38 L70.5 32 L79 38 L79 16 Z" fill="url(#grad)"/>
+  <!-- Left tall panel block -->
+  <rect x="11" y="15" width="36" height="70" rx="7" fill="#1e5e32" opacity="0.75"/>
+  <rect x="11" y="15" width="36" height="70" rx="7" fill="none" stroke="#b0dcc4" stroke-width="1.5" opacity="0.4"/>
+
+  <!-- Top-right panel block -->
+  <rect x="54" y="15" width="35" height="31" rx="7" fill="#1a5230" opacity="0.75"/>
+  <rect x="54" y="15" width="35" height="31" rx="7" fill="none" stroke="#b0dcc4" stroke-width="1.5" opacity="0.4"/>
+
+  <!-- Bottom-right panel block -->
+  <rect x="54" y="54" width="35" height="31" rx="7" fill="#1a5230" opacity="0.75"/>
+  <rect x="54" y="54" width="35" height="31" rx="7" fill="none" stroke="#b0dcc4" stroke-width="1.5" opacity="0.4"/>
+
+  <!-- Mini bar chart in left panel (readable at medium sizes) -->
+  <rect x="17" y="60" width="7" height="17" rx="2" fill="#b0dcc4" opacity="0.8"/>
+  <rect x="26" y="50" width="7" height="27" rx="2" fill="#b0dcc4" opacity="0.65"/>
+  <rect x="35" y="55" width="7" height="22" rx="2" fill="#b0dcc4" opacity="0.5"/>
 </svg>
