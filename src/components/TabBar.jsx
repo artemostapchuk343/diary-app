@@ -12,7 +12,8 @@ export default function TabBar() {
   const navigate = useNavigate()
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-40 bg-black/50 backdrop-blur-md border-t border-white/[0.06]">
+    <nav className="fixed bottom-0 inset-x-0 z-40 bg-black/50 backdrop-blur-md border-t border-white/[0.06]"
+         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="flex">
         {TABS.map(({ path, label, icon: Icon, match }) => {
           const active = match(pathname)

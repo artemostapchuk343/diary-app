@@ -370,7 +370,7 @@ export default function EntryList() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <ProfilePic size="sm" editable />
-            <h1 className="text-2xl font-semibold text-white">My Dashboard</h1>
+            <h1 className="text-xl font-semibold text-white whitespace-nowrap">My Dashboard</h1>
           </div>
           <div className="flex items-center gap-2">
             <button
