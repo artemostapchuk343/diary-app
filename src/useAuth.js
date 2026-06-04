@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { hasPassword, loadPasswordConfig } from './crypto'
+import { hasPassword, loadPasswordConfig, getPasswordConfig } from './crypto'
 
 // One-time migration: diary_unlocked_date → dashboard_unlocked_date
 ;(function () {
@@ -32,22 +32,23 @@ export const useAuth = create((set) => ({
   },
 
   init: async () => {
-    if (hasPassword()) {
-      set({ initializing: false })
-      return
-    }
     try {
-      const { silentSignIn, downloadPasswordConfig, isConfigured, signIn } = await import('./googleDrive')
+      const { silentSignIn, downloadPasswordConfig, isConfigured, signIn, uploadPasswordConfig } = await import('./googleDrive')
       const ok = await silentSignIn()
-      if (ok) {
-        const config = await downloadPasswordConfig()
-        if (config?.salt && config?.verify) {
-          loadPasswordConfig(config)
+      if (!hasPassword()) {
+        if (ok) {
+          const config = await downloadPasswordConfig()
+          if (config?.salt && config?.verify) {
+            loadPasswordConfig(config)
+          }
+        } else if (isConfigured() && !sessionStorage.getItem('gdrive_auth_attempted')) {
+          sessionStorage.setItem('gdrive_auth_attempted', '1')
+          signIn()
+          return
         }
-      } else if (isConfigured() && !sessionStorage.getItem('gdrive_auth_attempted')) {
-        sessionStorage.setItem('gdrive_auth_attempted', '1')
-        signIn()
-        return
+      } else if (ok) {
+        // Upload local password to Drive so it stays current across devices
+        uploadPasswordConfig(getPasswordConfig()).catch(() => {})
       }
     } catch (e) {
       console.error('Auth init failed:', e)
