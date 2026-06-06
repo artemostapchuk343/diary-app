@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, Trash2, Paperclip, X, Image, Languages, Mic } from 'lucide-react'
+import { ArrowLeft, Trash2, Paperclip, X, Image, Languages, Mic, Sparkles } from 'lucide-react'
 import MediaLightbox from '../components/MediaLightbox'
 import AudioRecorder from '../components/AudioRecorder'
 import { db } from '../db'
@@ -155,6 +155,9 @@ export default function EntryEditor() {
   const [editing, setEditing] = useState(isNew)
   const [detectedLang, setDetectedLang] = useState(null)
   const [showRecorder, setShowRecorder] = useState(false)
+  const [tidying, setTidying] = useState(false)
+  const [tidyPreview, setTidyPreview] = useState(null)
+  const [tidyError, setTidyError] = useState('')
 
   useEffect(() => {
     const el = textareaRef.current
@@ -332,6 +335,27 @@ export default function EntryEditor() {
     setEditing(false)
   }
 
+  async function handleTidy() {
+    if (tidying || !body.trim()) return
+    setTidying(true)
+    setTidyError('')
+    try {
+      const resp = await fetch('https://raspberrypi.tail51efc.ts.net/api/tidy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: body }),
+      })
+      const data = await resp.json()
+      if (data.error) throw new Error(data.error)
+      setTidyPreview(data.result)
+    } catch (e) {
+      setTidyError('Tidy Up failed. Is the server on?')
+      setTimeout(() => setTidyError(''), 4000)
+    } finally {
+      setTidying(false)
+    }
+  }
+
   async function handleRestore() {
     if (!deletedPromptEntry) return
     setDeletedPromptEntry(null)
@@ -462,6 +486,30 @@ export default function EntryEditor() {
           onPromotePrimary={promoteToPrimary}
           onCancel={() => setShowDeleteModal(false)}
         />
+      )}
+      {tidyPreview !== null && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
+          <div className="bg-[#1a1a22] border border-white/10 rounded-2xl p-6 w-full max-w-lg flex flex-col gap-4 max-h-[80vh]">
+            <h2 className="text-white text-lg font-semibold shrink-0">Tidy Up preview</h2>
+            <div className="overflow-y-auto flex-1 text-slate-200 text-base leading-relaxed whitespace-pre-wrap bg-white/5 rounded-xl p-4">
+              {tidyPreview}
+            </div>
+            <div className="flex gap-3 shrink-0">
+              <button
+                onClick={() => { setBody(tidyPreview); setDirty(true); setTidyPreview(null) }}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl py-3 transition-colors"
+              >
+                Apply
+              </button>
+              <button
+                onClick={() => setTidyPreview(null)}
+                className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 font-medium rounded-xl py-3 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="max-w-2xl mx-auto">
@@ -631,7 +679,7 @@ export default function EntryEditor() {
 
           {/* Photo / File buttons — edit mode only */}
           {!activeLang && editing && (
-            <div className="mt-5 pt-5 border-t border-white/10 flex items-center gap-5">
+            <div className="mt-5 pt-5 border-t border-white/10 flex items-center gap-5 flex-wrap">
               <input ref={photoRef} type="file" multiple accept="image/*,video/*" className="hidden" onChange={e => handleFiles(e.target.files)} />
               <input ref={fileRef} type="file" multiple className="hidden" onChange={e => handleFiles(e.target.files)} />
               <button onClick={() => photoRef.current.click()} className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-base transition-colors">
@@ -646,6 +694,16 @@ export default function EntryEditor() {
                 <Mic size={20} />
                 <span>Voice</span>
               </button>
+              <button
+                onClick={handleTidy}
+                disabled={tidying || !body.trim()}
+                className="flex items-center gap-2 text-slate-400 hover:text-violet-300 disabled:opacity-40 text-base transition-colors ml-auto"
+                title="Fix grammar, translate to English, tidy up"
+              >
+                <Sparkles size={20} className={tidying ? 'animate-pulse text-violet-400' : ''} />
+                <span>{tidying ? 'Tidying…' : 'Tidy Up'}</span>
+              </button>
+              {tidyError && <p className="w-full text-red-400 text-xs">{tidyError}</p>}
             </div>
           )}
         </div>
