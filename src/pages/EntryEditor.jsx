@@ -155,8 +155,9 @@ export default function EntryEditor() {
   const [editing, setEditing] = useState(isNew)
   const [detectedLang, setDetectedLang] = useState(null)
   const [showRecorder, setShowRecorder] = useState(false)
-  const [tidying, setTidying] = useState(false)
-  const [tidyPreview, setTidyPreview] = useState(null)
+  const [tidyModal, setTidyModal] = useState(null) // null | 'menu' | 'custom' | 'loading' | 'preview'
+  const [tidyCustomPrompt, setTidyCustomPrompt] = useState('')
+  const [tidyPreview, setTidyPreview] = useState('')
   const [tidyError, setTidyError] = useState('')
 
   useEffect(() => {
@@ -335,25 +336,34 @@ export default function EntryEditor() {
     setEditing(false)
   }
 
-  async function handleTidy() {
-    if (tidying || !body.trim()) return
-    setTidying(true)
+  const TIDY_INSTRUCTIONS = {
+    tidy: 'Fix any grammar or spelling errors. If the text is in a non-English language, translate it to English. Tidy it up — make it flow naturally, fix awkward phrasing, preserve the original meaning and tone.',
+    shorten: 'Fix any grammar or spelling errors. If the text is in a non-English language, translate it to English. Tidy it up and shorten it significantly — condense to the key points while keeping the essential meaning.',
+  }
+
+  async function callTidy(instructions) {
+    setTidyModal('loading')
     setTidyError('')
     try {
       const resp = await fetch('https://raspberrypi.tail51efc.ts.net/api/tidy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body }),
+        body: JSON.stringify({ text: body, instructions }),
       })
       const data = await resp.json()
       if (data.error) throw new Error(data.error)
       setTidyPreview(data.result)
+      setTidyModal('preview')
     } catch (e) {
       setTidyError('Tidy Up failed. Is the server on?')
+      setTidyModal('menu')
       setTimeout(() => setTidyError(''), 4000)
-    } finally {
-      setTidying(false)
     }
+  }
+
+  function handleTidyOption(mode) {
+    if (mode === 'custom') { setTidyModal('custom'); return }
+    callTidy(TIDY_INSTRUCTIONS[mode])
   }
 
   async function handleRestore() {
@@ -487,27 +497,87 @@ export default function EntryEditor() {
           onCancel={() => setShowDeleteModal(false)}
         />
       )}
-      {tidyPreview !== null && (
+      {tidyModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-6">
-          <div className="bg-[#1a1a22] border border-white/10 rounded-2xl p-6 w-full max-w-lg flex flex-col gap-4 max-h-[80vh]">
-            <h2 className="text-white text-lg font-semibold shrink-0">Tidy Up preview</h2>
-            <div className="overflow-y-auto flex-1 text-slate-200 text-base leading-relaxed whitespace-pre-wrap bg-white/5 rounded-xl p-4">
-              {tidyPreview}
-            </div>
-            <div className="flex gap-3 shrink-0">
-              <button
-                onClick={() => { setBody(tidyPreview); setDirty(true); setTidyPreview(null) }}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl py-3 transition-colors"
-              >
-                Apply
-              </button>
-              <button
-                onClick={() => setTidyPreview(null)}
-                className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 font-medium rounded-xl py-3 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
+          <div className="bg-[#1a1a22] border border-white/10 rounded-2xl p-6 w-full max-w-lg flex flex-col gap-4 max-h-[85vh]">
+
+            {tidyModal === 'menu' && (
+              <>
+                <h2 className="text-white text-lg font-semibold">Tidy Up</h2>
+                <div className="flex flex-col gap-2">
+                  {[
+                    { mode: 'tidy', label: 'Only tidy up', desc: 'Fix grammar, translate to English' },
+                    { mode: 'shorten', label: 'Tidy up and shorten', desc: 'Also condenses to key points' },
+                    { mode: 'custom', label: 'Custom', desc: 'Specify what to do' },
+                  ].map(({ mode, label, desc }) => (
+                    <button key={mode} onClick={() => handleTidyOption(mode)}
+                      className="flex flex-col items-start gap-0.5 px-4 py-3 bg-white/5 hover:bg-violet-600/20 hover:border-violet-500/30 border border-white/10 rounded-xl text-left transition-colors">
+                      <span className="text-white font-medium">{label}</span>
+                      <span className="text-slate-500 text-sm">{desc}</span>
+                    </button>
+                  ))}
+                </div>
+                {tidyError && <p className="text-red-400 text-xs">{tidyError}</p>}
+                <button onClick={() => setTidyModal(null)} className="text-slate-500 hover:text-slate-300 text-sm py-1 transition-colors">Cancel</button>
+              </>
+            )}
+
+            {tidyModal === 'custom' && (
+              <>
+                <h2 className="text-white text-lg font-semibold">Custom instructions</h2>
+                <p className="text-slate-400 text-sm -mt-2">Translates to English by default unless you say otherwise.</p>
+                <textarea
+                  autoFocus
+                  value={tidyCustomPrompt}
+                  onChange={e => setTidyCustomPrompt(e.target.value)}
+                  placeholder="e.g. Make it more formal and concise"
+                  rows={4}
+                  className="bg-white/5 border border-white/10 rounded-xl p-4 text-slate-200 placeholder-slate-600 outline-none resize-none text-base leading-relaxed"
+                  onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && tidyCustomPrompt.trim()) callTidy(tidyCustomPrompt + '\n\nAlso translate to English unless specifically told not to.') }}
+                />
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => callTidy(tidyCustomPrompt + '\n\nAlso translate to English unless specifically told not to.')}
+                    disabled={!tidyCustomPrompt.trim()}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-medium rounded-xl py-3 transition-colors"
+                  >
+                    Process
+                  </button>
+                  <button onClick={() => setTidyModal('menu')} className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 font-medium rounded-xl py-3 transition-colors">Back</button>
+                </div>
+              </>
+            )}
+
+            {tidyModal === 'loading' && (
+              <>
+                <h2 className="text-white text-lg font-semibold">Processing…</h2>
+                <div className="flex items-center justify-center py-10">
+                  <div className="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              </>
+            )}
+
+            {tidyModal === 'preview' && (
+              <>
+                <h2 className="text-white text-lg font-semibold shrink-0">Preview</h2>
+                <textarea
+                  value={tidyPreview}
+                  onChange={e => setTidyPreview(e.target.value)}
+                  className="flex-1 overflow-y-auto bg-white/5 border border-white/10 rounded-xl p-4 text-slate-200 text-base leading-relaxed outline-none resize-none min-h-40"
+                  rows={12}
+                />
+                <div className="flex gap-3 shrink-0">
+                  <button
+                    onClick={() => { setBody(tidyPreview); setDirty(true); setTidyModal(null) }}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-xl py-3 transition-colors"
+                  >
+                    Apply
+                  </button>
+                  <button onClick={() => setTidyModal(null)} className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 font-medium rounded-xl py-3 transition-colors">Cancel</button>
+                </div>
+              </>
+            )}
+
           </div>
         </div>
       )}
@@ -695,15 +765,13 @@ export default function EntryEditor() {
                 <span>Voice</span>
               </button>
               <button
-                onClick={handleTidy}
-                disabled={tidying || !body.trim()}
+                onClick={() => { if (body.trim()) setTidyModal('menu') }}
+                disabled={!body.trim()}
                 className="flex items-center gap-2 text-slate-400 hover:text-violet-300 disabled:opacity-40 text-base transition-colors ml-auto"
-                title="Fix grammar, translate to English, tidy up"
               >
-                <Sparkles size={20} className={tidying ? 'animate-pulse text-violet-400' : ''} />
-                <span>{tidying ? 'Tidying…' : 'Tidy Up'}</span>
+                <Sparkles size={20} />
+                <span>Tidy Up</span>
               </button>
-              {tidyError && <p className="w-full text-red-400 text-xs">{tidyError}</p>}
             </div>
           )}
         </div>
