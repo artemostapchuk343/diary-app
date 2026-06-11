@@ -337,8 +337,8 @@ export default function EntryEditor() {
   }
 
   const TIDY_INSTRUCTIONS = {
-    tidy: 'Fix any grammar or spelling errors. If the text is in a non-English language, translate it to English. Tidy it up — make it flow naturally, fix awkward phrasing, preserve the original meaning and tone.',
-    shorten: 'Fix any grammar or spelling errors. If the text is in a non-English language, translate it to English. Tidy it up and shorten it significantly — condense to the key points while keeping the essential meaning.',
+    tidy: 'Fix grammar and spelling mistakes. If the text is in a non-English language, translate it to English. Keep the original voice and style — this is a personal diary, not formal writing. Only make small targeted fixes; do not rewrite sentences, do not make it sound polished or literary.',
+    shorten: 'Fix grammar and spelling mistakes. If the text is in a non-English language, translate it to English. Condense to the key points, cutting filler and repetition. Keep the original voice and style — this is a personal diary, not formal writing. Do not rewrite or over-polish.',
   }
 
   async function callTidy(instructions) {
