@@ -42,11 +42,26 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
   const timerRef = useRef(null)
   const streamRef = useRef(null)
   const urlRef = useRef(null)
+  const wakeLockRef = useRef(null)
 
   useEffect(() => () => cleanup(), [])
 
+  async function acquireWakeLock() {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request('screen')
+      }
+    } catch {}
+  }
+
+  function releaseWakeLock() {
+    try { wakeLockRef.current?.release() } catch {}
+    wakeLockRef.current = null
+  }
+
   function cleanup() {
     clearInterval(timerRef.current)
+    releaseWakeLock()
     if (mediaRecorderRef.current?.state !== 'inactive') {
       try { mediaRecorderRef.current.stop() } catch {}
     }
@@ -77,6 +92,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
     mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
     mr.start()
 
+    await acquireWakeLock()
     timerRef.current = setInterval(() => setElapsed(t => t + 1), 1000)
     setPhase('recording')
   }
@@ -98,6 +114,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
       mr.stop()
     }
 
+    releaseWakeLock()
     streamRef.current?.getTracks().forEach(t => t.stop())
     streamRef.current = null
     setPhase('processing')
