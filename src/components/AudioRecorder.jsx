@@ -2,7 +2,10 @@ import { useState, useRef, useEffect } from 'react'
 import { X, Mic, Square } from 'lucide-react'
 
 
-const DEFAULT_INSTRUCTIONS = `Fix ONLY transcription errors, spelling, and grammar. Preserve EVERY sentence and idea — do NOT summarize, shorten, condense, or remove any content. If not in English, translate to English. Keep the personal voice and style exactly as spoken. Return the full corrected text, nothing else.`
+const INSTRUCTIONS = {
+  preserve: `Fix ONLY transcription errors, spelling, and grammar. Preserve EVERY sentence and idea — do NOT summarize, shorten, condense, or remove any content. If not in English, translate to English. Keep the personal voice and style exactly as spoken. Return the full corrected text, nothing else.`,
+  summarize: `This is a personal diary voice note. Summarize it to roughly half the length — keep the key events, feelings, and decisions, cut filler and repetition. If not in English, translate to English. Return only the summary, no explanations.`,
+}
 
 function fmt(s) {
   return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
@@ -31,7 +34,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
   const [audioBlob, setAudioBlob] = useState(null)
   const [result, setResult] = useState('')
   const [error, setError] = useState('')
-  const [customMode, setCustomMode] = useState(false)
+  const [mode, setMode] = useState('preserve') // preserve | summarize | custom
   const [customPrompt, setCustomPrompt] = useState('')
 
   const mediaRecorderRef = useRef(null)
@@ -102,9 +105,9 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
 
   async function sendToServer(blob) {
     setError('')
-    const instructions = customMode && customPrompt
+    const instructions = mode === 'custom' && customPrompt
       ? customPrompt + '\n\nThis is a voice recording transcript. Translate to English unless told otherwise.'
-      : DEFAULT_INSTRUCTIONS
+      : INSTRUCTIONS[mode] || INSTRUCTIONS.preserve
 
     try {
       const audioBase64 = await blobToBase64(blob)
@@ -162,21 +165,18 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
         {phase === 'idle' && (
           <div className="flex flex-col gap-4">
             <div className="flex gap-2">
-              <button
-                onClick={() => setCustomMode(false)}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${!customMode ? 'bg-indigo-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
-              >
-                Default
-              </button>
-              <button
-                onClick={() => setCustomMode(true)}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${customMode ? 'bg-indigo-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
-              >
-                Custom
-              </button>
+              {['preserve', 'summarize', 'custom'].map(m => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium capitalize transition-colors ${mode === m ? 'bg-indigo-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                >
+                  {m === 'preserve' ? 'Preserve' : m === 'summarize' ? 'Summarize' : 'Custom'}
+                </button>
+              ))}
             </div>
 
-            {customMode && (
+            {mode === 'custom' && (
               <textarea
                 className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-indigo-500"
                 rows={3}
@@ -189,7 +189,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
             <div className="flex flex-col items-center gap-2 py-2">
               <button
                 onClick={start}
-                disabled={customMode && !customPrompt.trim()}
+                disabled={mode === 'custom' && !customPrompt.trim()}
                 className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-500 disabled:opacity-40 flex items-center justify-center transition-colors shadow-lg"
               >
                 <Mic size={28} className="text-white" />
