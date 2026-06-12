@@ -8,6 +8,11 @@ import { format } from 'date-fns'
 import MoodPicker from '../components/MoodPicker'
 import { isSignedIn, markEntryDeleted, uploadSingleEntry, restoreAndUpload } from '../googleDrive'
 
+const VOICE_INSTRUCTIONS = {
+  preserve: `Fix ONLY transcription errors, spelling, and grammar. Preserve EVERY sentence and idea — do NOT summarize, shorten, condense, or remove any content. If not in English, translate to English. Keep the personal voice and style exactly as spoken. Return the full corrected text, nothing else.`,
+  summarize: `This is a personal diary voice note. Summarize it to roughly half the length — keep the key events, feelings, and decisions, cut filler and repetition. If not in English, translate to English. Return only the summary, no explanations.`,
+}
+
 const STATUS_LABEL = {
   idle: 'Save',
   saving: 'Saving…',
@@ -160,6 +165,8 @@ export default function EntryEditor() {
   const [tidyPreview, setTidyPreview] = useState('')
   const [tidyError, setTidyError] = useState('')
   const [attTranscribe, setAttTranscribe] = useState({}) // { [idx]: { loading, result, error } }
+  const [attPick, setAttPick] = useState({}) // { [idx]: 'menu' | 'custom' | false }
+  const [attCustom, setAttCustom] = useState({}) // { [idx]: string }
 
   useEffect(() => {
     const el = textareaRef.current
@@ -367,14 +374,15 @@ export default function EntryEditor() {
     callTidy(TIDY_INSTRUCTIONS[mode])
   }
 
-  async function transcribeAttachment(idx, dataUrl) {
+  async function transcribeAttachment(idx, dataUrl, instructions) {
+    setAttPick(prev => ({ ...prev, [idx]: false }))
     setAttTranscribe(prev => ({ ...prev, [idx]: { loading: true, result: '', error: '' } }))
     try {
       const base64 = dataUrl.split(',')[1]
       const resp = await fetch('https://raspberrypi.tail51efc.ts.net/api/voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audio: base64, mimeType: dataUrl.split(';')[0].split(':')[1] || '' }),
+        body: JSON.stringify({ audio: base64, mimeType: dataUrl.split(';')[0].split(':')[1] || '', instructions }),
       })
       const data = await resp.json()
       if (data.error) throw new Error(data.error)
@@ -744,17 +752,46 @@ export default function EntryEditor() {
                         <div className="flex items-center gap-3 px-4 py-3">
                           <Mic size={16} className="text-indigo-400 shrink-0" />
                           <audio src={att.data} controls className="flex-1 h-9 min-w-0" />
-                          <button
-                            onClick={() => transcribeAttachment(i, att.data)}
-                            disabled={attTranscribe[i]?.loading}
-                            className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs font-medium transition-colors disabled:opacity-50"
-                            title="Transcribe with AI"
-                          >
-                            {attTranscribe[i]?.loading
-                              ? <span className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin" />
-                              : <Sparkles size={12} />}
-                          </button>
+                          {attTranscribe[i]?.loading
+                            ? <span className="shrink-0 w-4 h-4 border border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                            : !attTranscribe[i]?.result && (
+                              <button
+                                onClick={() => setAttPick(prev => ({ ...prev, [i]: prev[i] ? false : 'menu' }))}
+                                className={`shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${attPick[i] ? 'bg-indigo-600/40 text-indigo-200' : 'bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300'}`}
+                                title="Transcribe with AI"
+                              >
+                                <Sparkles size={12} />
+                              </button>
+                            )
+                          }
                         </div>
+                        {attPick[i] === 'menu' && (
+                          <div className="px-4 pb-3 flex gap-2">
+                            <button onClick={() => transcribeAttachment(i, att.data, VOICE_INSTRUCTIONS.preserve)} className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-indigo-600/30 text-indigo-300 text-xs font-medium transition-colors">Preserve</button>
+                            <button onClick={() => transcribeAttachment(i, att.data, VOICE_INSTRUCTIONS.summarize)} className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-indigo-600/30 text-indigo-300 text-xs font-medium transition-colors">Summarize</button>
+                            <button onClick={() => setAttPick(prev => ({ ...prev, [i]: 'custom' }))} className="flex-1 py-1.5 rounded-lg bg-white/5 hover:bg-indigo-600/30 text-indigo-300 text-xs font-medium transition-colors">Custom</button>
+                          </div>
+                        )}
+                        {attPick[i] === 'custom' && (
+                          <div className="px-4 pb-3 flex flex-col gap-2">
+                            <textarea
+                              className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-xs text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-indigo-500"
+                              rows={2}
+                              placeholder="Instructions for Claude…"
+                              value={attCustom[i] || ''}
+                              onChange={e => setAttCustom(prev => ({ ...prev, [i]: e.target.value }))}
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => transcribeAttachment(i, att.data, (attCustom[i] || '') + '\n\nThis is a voice recording transcript. Translate to English unless told otherwise.')}
+                                disabled={!(attCustom[i] || '').trim()}
+                                className="flex-1 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-medium transition-colors"
+                              >Go</button>
+                              <button onClick={() => setAttPick(prev => ({ ...prev, [i]: 'menu' }))} className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 text-xs transition-colors">Back</button>
+                            </div>
+                          </div>
+                        )}
+
                         {attTranscribe[i]?.error && (
                           <p className="px-4 pb-2 text-red-400 text-xs">{attTranscribe[i].error}</p>
                         )}
