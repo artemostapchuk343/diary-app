@@ -1,14 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { X, Mic, Square } from 'lucide-react'
 
-const LANGUAGES = [
-  { code: 'uk-UA', flag: '🇺🇦', label: 'UA' },
-  { code: 'pl-PL', flag: '🇵🇱', label: 'PL' },
-  { code: 'en-US', flag: '🇬🇧', label: 'EN' },
-  { code: 'ru-RU', flag: '🇷🇺', label: 'RU' },
-]
-
-const LANG_KEY = 'audio_lang'
 
 const DEFAULT_INSTRUCTIONS = `This is a raw voice-to-text transcript from a personal diary audio recording. Fix transcription errors, grammar, and spelling. If not in English, translate to English. Keep the personal voice and style — this is a diary, not formal writing. Return only the cleaned text, no explanations.`
 
@@ -16,9 +8,24 @@ function fmt(s) {
   return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
 }
 
+function blobToBase64(blob) {
+  return new Promise(res => {
+    const reader = new FileReader()
+    reader.onload = e => res(e.target.result.split(',')[1])
+    reader.readAsDataURL(blob)
+  })
+}
+
+function blobToDataUrl(blob) {
+  return new Promise(res => {
+    const reader = new FileReader()
+    reader.onload = e => res(e.target.result)
+    reader.readAsDataURL(blob)
+  })
+}
+
 export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
   const [phase, setPhase] = useState('idle') // idle | recording | processing | preview
-  const [lang, setLang] = useState(() => localStorage.getItem(LANG_KEY) || 'uk-UA')
   const [elapsed, setElapsed] = useState(0)
   const [audioUrl, setAudioUrl] = useState(null)
   const [audioBlob, setAudioBlob] = useState(null)
@@ -27,24 +34,16 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
   const [customMode, setCustomMode] = useState(false)
   const [customPrompt, setCustomPrompt] = useState('')
 
-  const recognitionRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const chunksRef = useRef([])
   const timerRef = useRef(null)
   const streamRef = useRef(null)
-  const finalRef = useRef('')
   const urlRef = useRef(null)
-
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition
 
   useEffect(() => () => cleanup(), [])
 
   function cleanup() {
     clearInterval(timerRef.current)
-    const rec = recognitionRef.current
-    recognitionRef.current = null
-    if (rec) { try { rec.abort() } catch {} }
     if (mediaRecorderRef.current?.state !== 'inactive') {
       try { mediaRecorderRef.current.stop() } catch {}
     }
@@ -54,7 +53,6 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
   }
 
   async function start() {
-    finalRef.current = ''
     setElapsed(0)
     setAudioUrl(null)
     setAudioBlob(null)
@@ -76,25 +74,6 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
     mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
     mr.start()
 
-    if (SR) {
-      const rec = new SR()
-      rec.lang = lang
-      rec.continuous = true
-      rec.interimResults = false
-      rec.onresult = e => {
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) finalRef.current += e.results[i][0].transcript + ' '
-        }
-      }
-      rec.onerror = () => {}
-      // On mobile, don't restart — the beep-on-restart loop makes it unusable
-      rec.onend = () => {
-        if (!isMobile && recognitionRef.current === rec) { try { rec.start() } catch {} }
-      }
-      rec.start()
-      recognitionRef.current = rec
-    }
-
     timerRef.current = setInterval(() => setElapsed(t => t + 1), 1000)
     setPhase('recording')
   }
@@ -102,24 +81,18 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
   function stop() {
     clearInterval(timerRef.current)
 
-    const rec = recognitionRef.current
-    recognitionRef.current = null
-    if (rec) { try { rec.stop() } catch {} }
-
     const mr = mediaRecorderRef.current
     if (mr?.state !== 'inactive') {
-      mr.onstop = () => {
+      mr.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' })
         const ext = blob.type?.includes('ogg') ? 'ogg' : blob.type?.includes('mp4') ? 'mp4' : 'webm'
         const url = URL.createObjectURL(blob)
         urlRef.current = url
         setAudioBlob({ blob, ext, type: blob.type || 'audio/webm', size: blob.size })
         setAudioUrl(url)
-        sendToServer(finalRef.current.trim())
+        await sendToServer(blob)
       }
       mr.stop()
-    } else {
-      sendToServer(finalRef.current.trim())
     }
 
     streamRef.current?.getTracks().forEach(t => t.stop())
@@ -127,41 +100,26 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
     setPhase('processing')
   }
 
-  async function sendToServer(rawTranscript, instructions) {
-    setPhase('processing')
+  async function sendToServer(blob) {
     setError('')
-    const inst = instructions || (customMode && customPrompt
+    const instructions = customMode && customPrompt
       ? customPrompt + '\n\nThis is a voice recording transcript. Translate to English unless told otherwise.'
-      : DEFAULT_INSTRUCTIONS)
-
-    if (!rawTranscript) {
-      setResult('')
-      setPhase('preview')
-      return
-    }
+      : DEFAULT_INSTRUCTIONS
 
     try {
-      const resp = await fetch('https://raspberrypi.tail51efc.ts.net/api/tidy', {
+      const audioBase64 = await blobToBase64(blob)
+      const resp = await fetch('https://raspberrypi.tail51efc.ts.net/api/voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: rawTranscript, instructions: inst }),
+        body: JSON.stringify({ audio: audioBase64, instructions }),
       })
       const data = await resp.json()
       if (data.error) throw new Error(data.error)
-      setResult(data.result)
-    } catch {
-      setError('Failed to process. You can still save the audio note.')
-      setResult(rawTranscript)
+      setResult(data.result || '')
+    } catch (e) {
+      setError('Transcription failed: ' + e.message)
     }
     setPhase('preview')
-  }
-
-  function blobToDataUrl(blob) {
-    return new Promise(res => {
-      const reader = new FileReader()
-      reader.onload = e => res(e.target.result)
-      reader.readAsDataURL(blob)
-    })
   }
 
   async function handleInsert() {
@@ -187,11 +145,6 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
     onClose()
   }
 
-  function changeLang(code) {
-    setLang(code)
-    localStorage.setItem(LANG_KEY, code)
-  }
-
   return (
     <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 px-0 sm:px-6">
       <div className="bg-[#1a1a2e] border border-white/10 rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl">
@@ -208,20 +161,6 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
         {/* Idle */}
         {phase === 'idle' && (
           <div className="flex flex-col gap-4">
-            <div className="flex gap-2">
-              {LANGUAGES.map(({ code, flag, label }) => (
-                <button
-                  key={code}
-                  onClick={() => changeLang(code)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    lang === code ? 'bg-indigo-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200'
-                  }`}
-                >
-                  <span>{flag}</span><span>{label}</span>
-                </button>
-              ))}
-            </div>
-
             <div className="flex gap-2">
               <button
                 onClick={() => setCustomMode(false)}
@@ -281,14 +220,14 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
         {phase === 'processing' && (
           <div className="flex flex-col items-center gap-3 py-6">
             <div className="w-8 h-8 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-            <span className="text-slate-400 text-sm">Claude is processing…</span>
+            <span className="text-slate-400 text-sm">Transcribing…</span>
           </div>
         )}
 
         {/* Preview */}
         {phase === 'preview' && (
           <div className="flex flex-col gap-4">
-            {error && <p className="text-amber-400 text-sm">{error}</p>}
+            {error && <p className="text-red-400 text-sm">{error}</p>}
             {result ? (
               <textarea
                 className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-slate-200 leading-relaxed resize-none focus:outline-none focus:border-indigo-500"
