@@ -159,6 +159,7 @@ export default function EntryEditor() {
   const [tidyCustomPrompt, setTidyCustomPrompt] = useState('')
   const [tidyPreview, setTidyPreview] = useState('')
   const [tidyError, setTidyError] = useState('')
+  const [attTranscribe, setAttTranscribe] = useState({}) // { [idx]: { loading, result, error } }
 
   useEffect(() => {
     const el = textareaRef.current
@@ -364,6 +365,23 @@ export default function EntryEditor() {
   function handleTidyOption(mode) {
     if (mode === 'custom') { setTidyModal('custom'); return }
     callTidy(TIDY_INSTRUCTIONS[mode])
+  }
+
+  async function transcribeAttachment(idx, dataUrl) {
+    setAttTranscribe(prev => ({ ...prev, [idx]: { loading: true, result: '', error: '' } }))
+    try {
+      const base64 = dataUrl.split(',')[1]
+      const resp = await fetch('https://raspberrypi.tail51efc.ts.net/api/voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audio: base64 }),
+      })
+      const data = await resp.json()
+      if (data.error) throw new Error(data.error)
+      setAttTranscribe(prev => ({ ...prev, [idx]: { loading: false, result: data.result || '', error: '' } }))
+    } catch (e) {
+      setAttTranscribe(prev => ({ ...prev, [idx]: { loading: false, result: '', error: e.message } }))
+    }
   }
 
   async function handleRestore() {
@@ -722,9 +740,46 @@ export default function EntryEditor() {
                         </div>
                       </div>
                     ) : att.type?.startsWith('audio/') ? (
-                      <div className="flex items-center gap-3 px-4 py-3">
-                        <Mic size={16} className="text-indigo-400 shrink-0" />
-                        <audio src={att.data} controls className="flex-1 h-9 min-w-0" />
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-3 px-4 py-3">
+                          <Mic size={16} className="text-indigo-400 shrink-0" />
+                          <audio src={att.data} controls className="flex-1 h-9 min-w-0" />
+                          <button
+                            onClick={() => transcribeAttachment(i, att.data)}
+                            disabled={attTranscribe[i]?.loading}
+                            className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs font-medium transition-colors disabled:opacity-50"
+                            title="Transcribe with AI"
+                          >
+                            {attTranscribe[i]?.loading
+                              ? <span className="w-3 h-3 border border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                              : <Sparkles size={12} />}
+                          </button>
+                        </div>
+                        {attTranscribe[i]?.error && (
+                          <p className="px-4 pb-2 text-red-400 text-xs">{attTranscribe[i].error}</p>
+                        )}
+                        {attTranscribe[i]?.result && (
+                          <div className="px-4 pb-3 flex flex-col gap-2">
+                            <textarea
+                              className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-xs text-slate-200 resize-none focus:outline-none focus:border-indigo-500"
+                              rows={3}
+                              value={attTranscribe[i].result}
+                              onChange={e => setAttTranscribe(prev => ({ ...prev, [i]: { ...prev[i], result: e.target.value } }))}
+                            />
+                            <div className="flex gap-2">
+                              {editing && (
+                                <button
+                                  onClick={() => { setBody(prev => prev ? prev + '\n\n' + attTranscribe[i].result : attTranscribe[i].result); setDirty(true); setAttTranscribe(prev => ({ ...prev, [i]: { ...prev[i], result: '' } })) }}
+                                  className="flex-1 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
+                                >Insert into note</button>
+                              )}
+                              <button
+                                onClick={() => setAttTranscribe(prev => ({ ...prev, [i]: { ...prev[i], result: '' } }))}
+                                className="flex-1 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-slate-400 text-xs transition-colors"
+                              >Dismiss</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="flex items-center gap-3 p-4">
