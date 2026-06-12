@@ -111,7 +111,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
       const resp = await fetch('https://raspberrypi.tail51efc.ts.net/api/voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audio: audioBase64, instructions }),
+        body: JSON.stringify({ audio: audioBase64, instructions, mimeType: blob.type || '' }),
       })
       const data = await resp.json()
       if (data.error) throw new Error(data.error)

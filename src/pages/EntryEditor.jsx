@@ -374,7 +374,7 @@ export default function EntryEditor() {
       const resp = await fetch('https://raspberrypi.tail51efc.ts.net/api/voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audio: base64 }),
+        body: JSON.stringify({ audio: base64, mimeType: dataUrl.split(';')[0].split(':')[1] || '' }),
       })
       const data = await resp.json()
       if (data.error) throw new Error(data.error)
