@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { X, Mic, Square } from 'lucide-react'
 
 
-const DEFAULT_INSTRUCTIONS = `This is a raw voice-to-text transcript from a personal diary audio recording. Fix transcription errors, grammar, and spelling. If not in English, translate to English. Keep the personal voice and style — this is a diary, not formal writing. Return only the cleaned text, no explanations.`
+const DEFAULT_INSTRUCTIONS = `Fix ONLY transcription errors, spelling, and grammar. Preserve EVERY sentence and idea — do NOT summarize, shorten, condense, or remove any content. If not in English, translate to English. Keep the personal voice and style exactly as spoken. Return the full corrected text, nothing else.`
 
 function fmt(s) {
   return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
