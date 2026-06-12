@@ -35,6 +35,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
   const finalRef = useRef('')
   const urlRef = useRef(null)
 
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition
 
   useEffect(() => () => cleanup(), [])
@@ -86,8 +87,9 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
         }
       }
       rec.onerror = () => {}
+      // On mobile, don't restart — the beep-on-restart loop makes it unusable
       rec.onend = () => {
-        if (recognitionRef.current === rec) { try { rec.start() } catch {} }
+        if (!isMobile && recognitionRef.current === rec) { try { rec.start() } catch {} }
       }
       rec.start()
       recognitionRef.current = rec
@@ -134,7 +136,6 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
 
     if (!rawTranscript) {
       setResult('')
-      setError(SR ? 'Nothing was transcribed. Try again or save audio only.' : 'No transcription available in this browser. You can save the audio note.')
       setPhase('preview')
       return
     }
