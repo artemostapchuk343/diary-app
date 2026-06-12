@@ -167,7 +167,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 px-0 sm:px-6">
-      <div className="bg-[#1a1a2e] border border-white/10 rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl">
+      <div className="bg-[#1a1a2e] border border-white/10 rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
             <Mic size={18} className="text-indigo-400" />
@@ -248,7 +248,7 @@ export default function AudioRecorder({ onInsertText, onSaveAudio, onClose }) {
             {result ? (
               <textarea
                 className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-slate-200 leading-relaxed resize-none focus:outline-none focus:border-indigo-500"
-                rows={6}
+                rows={12}
                 value={result}
                 onChange={e => setResult(e.target.value)}
               />

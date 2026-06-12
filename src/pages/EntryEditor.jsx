@@ -798,8 +798,8 @@ export default function EntryEditor() {
                         {attTranscribe[i]?.result && (
                           <div className="px-4 pb-3 flex flex-col gap-2">
                             <textarea
-                              className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-xs text-slate-200 resize-none focus:outline-none focus:border-indigo-500"
-                              rows={3}
+                              className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-sm text-slate-200 leading-relaxed resize-none focus:outline-none focus:border-indigo-500"
+                              rows={10}
                               value={attTranscribe[i].result}
                               onChange={e => setAttTranscribe(prev => ({ ...prev, [i]: { ...prev[i], result: e.target.value } }))}
                             />
